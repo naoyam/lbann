@@ -37,7 +37,8 @@ namespace lbann {
  */
 class lbann_callback_profiler : public lbann_callback {
  public:
-  lbann_callback_profiler() : lbann_callback() {}
+  lbann_callback_profiler(int num_iterations=0) :
+      lbann_callback(), m_num_iterations(num_iterations) {}
   lbann_callback_profiler(const lbann_callback_profiler&) = default;
   lbann_callback_profiler& operator=(const lbann_callback_profiler&) = default;
   lbann_callback_profiler* copy() const override {
@@ -64,6 +65,7 @@ class lbann_callback_profiler : public lbann_callback {
                             0x22AA99, 0xAAAA11, 0x6633CC, 0xE67300, 0x8B0707, 0x329262,
                             0x5574A6, 0x3B3EAC};
   int get_color(Layer *l);
+  int m_num_iterations;
 };
 
 }  // namespace lbann

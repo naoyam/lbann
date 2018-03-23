@@ -474,6 +474,7 @@ message CallbackPrint {
 }
 
 message CallbackProfiler {
+  int32 iterations_to_run = 1; // stops early instead of running until completion	
 }
 
 message CallbackTimer {
@@ -694,6 +695,7 @@ message ParallelStrategy {
   int64 filter_groups = 5;
   // For fully-connected layers.
   int64 replications = 6;
+  int64 procs_per_replica = 7;
 }
 
 //========================================================================

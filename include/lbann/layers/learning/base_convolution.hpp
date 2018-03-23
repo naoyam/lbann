@@ -38,6 +38,7 @@
 #include "lbann/utils/random.hpp"
 #include "lbann/utils/timer.hpp"
 #include "lbann/utils/im2col.hpp"
+#include "lbann_config.hpp"
 
 namespace lbann {
 
@@ -370,6 +371,12 @@ class base_convolution_layer : public learning_layer {
                                                     work_space_size,
                                                     &convolution_cudnn_algorithm));
 
+#ifdef LBANN_HAS_DISTCONV
+      if (getenv("DISTCONV_DETERMINISTIC")) {
+        convolution_cudnn_algorithm = 
+            CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+      }
+#endif
     // Apply convolution
     CHECK_CUDA(cudaSetDevice(this->m_cudnn->get_gpu()));
     CHECK_CUDNN(cudnnSetStream(this->m_cudnn->get_handle(),
@@ -389,7 +396,7 @@ class base_convolution_layer : public learning_layer {
                                         output.Buffer()));
 
 
-  #endif // LBANN_HAS_CUDNN
+#endif // LBANN_HAS_CUDNN
   }
 
   /** Transposed convolution with cuDNN. */
@@ -439,6 +446,13 @@ class base_convolution_layer : public learning_layer {
                                                          work_space_size,
                                                          &transposed_convolution_cudnn_algorithm));
 
+#ifdef LBANN_HAS_DISTCONV
+      if (getenv("DISTCONV_DETERMINISTIC")) {
+        // Use deterministic algorithm
+        transposed_convolution_cudnn_algorithm
+            = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+      }
+#endif
     // Perform transposed convolution
     CHECK_CUDA(cudaSetDevice(this->m_cudnn->get_gpu()));
     CHECK_CUDNN(cudnnSetStream(this->m_cudnn->get_handle(),
@@ -457,7 +471,7 @@ class base_convolution_layer : public learning_layer {
                                              output_cudnn_desc,
                                              output.Buffer()));
 
-
+    
   #endif // LBANN_HAS_CUDNN
   }
 
@@ -535,6 +549,12 @@ class base_convolution_layer : public learning_layer {
                                                                CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
                                                                work_space_size,
                                                                &kernel_gradient_cudnn_algorithm));
+#ifdef LBANN_HAS_DISTCONV
+          if (getenv("DISTCONV_DETERMINISTIC")) {
+            kernel_gradient_cudnn_algorithm =
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          }
+#endif
         CHECK_CUDNN(cudnnConvolutionBackwardFilter(this->m_cudnn->get_handle(),
                                                    &one,
                                                    this->m_prev_error_signals_cudnn_desc,
@@ -558,6 +578,12 @@ class base_convolution_layer : public learning_layer {
                                                                CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT,
                                                                work_space_size,
                                                                &kernel_gradient_cudnn_algorithm));
+#ifdef LBANN_HAS_DISTCONV
+          if (getenv("DISTCONV_DETERMINISTIC")) {
+            kernel_gradient_cudnn_algorithm =
+                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          }
+#endif
         CHECK_CUDNN(cudnnConvolutionBackwardFilter(this->m_cudnn->get_handle(),
                                                    &one,
                                                    this->m_prev_activations_cudnn_desc,
@@ -571,7 +597,7 @@ class base_convolution_layer : public learning_layer {
                                                    &zero,
                                                    m_kernel_cudnn_desc,
                                                    m_kernel_gradient.Buffer()));
-
+        
       }
 
       // Add gradient contribution

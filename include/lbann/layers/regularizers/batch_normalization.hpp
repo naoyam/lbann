@@ -27,10 +27,15 @@
 #ifndef LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED
 #define LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED
 
+#include "lbann_config.hpp"
 #include "lbann/layers/regularizers/regularizer.hpp"
 #ifdef LBANN_HAS_CUDNN
 #include "lbann/layers/regularizers/batch_normalization_cuda.hpp"
 #endif // LBANN_HAS_CUDNN
+
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/distconv.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 namespace lbann {
 
@@ -259,6 +264,16 @@ class batch_normalization : public regularizer_layer {
 
   void fp_compute() override {
     if (this->using_gpus()) {
+#ifdef LBANN_HAS_DISTCONV
+      if (distconv_enabled()) {
+        fp_compute_distconv();
+        if (early_terminate_last_iteration()) {
+          fp_compute_gpu();
+          dump_reference_activations();
+        }
+        return;
+      }
+#endif
       fp_compute_gpu();
     } else {
       fp_compute_cpu();
@@ -267,6 +282,20 @@ class batch_normalization : public regularizer_layer {
 
   void bp_compute() override {
     if (this->using_gpus()) {
+#ifdef LBANN_HAS_DISTCONV
+      if (distconv_enabled()) {
+        bp_compute_distconv();
+        if (early_terminate_last_iteration()) {
+          assert0(dc::tensor::View(
+              m_error_signals_copyout,
+              get_error_signals().Buffer()));
+          m_error_signals_copyout.zero();
+          bp_compute_gpu();
+          dump_reference_error_signals();
+        }
+        return;
+      }
+#endif
       bp_compute_gpu();
     } else {
       bp_compute_cpu();
@@ -364,7 +393,7 @@ class batch_normalization : public regularizer_layer {
   #ifndef LBANN_HAS_CUDNN
     throw lbann_exception("batch_normalization_layer: cuDNN not detected");
   #else
-
+    
     // Check execution mode
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
 
@@ -715,6 +744,193 @@ class batch_normalization : public regularizer_layer {
     m_scale_gradient = nullptr;
     m_bias_gradient = nullptr;
   }
+
+#ifdef LBANN_HAS_DISTCONV
+ public:
+
+  void fp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
+    assert_always(distconv_enabled());
+
+    const bool is_training =
+        this->m_model->get_execution_mode() == execution_mode::training;
+    
+    assert_always(this->m_model->get_current_mini_batch_size() ==
+                  get_prev_activations().Width());
+
+    assert0(dc::tensor::View(
+        m_scale_t, get_weights()[0]->get_values().LockedBuffer()));
+    assert0(dc::tensor::View(
+        m_bias_t, get_weights()[1]->get_values().LockedBuffer()));
+    assert0(dc::tensor::View(
+        m_running_mean_t, get_weights()[2]->get_values().Buffer()));
+    assert0(dc::tensor::View(
+        m_running_var_t, get_weights()[3]->get_values().Buffer()));
+
+    m_bn->forward(m_prev_activations_t,
+                  m_mean_t,
+                  m_var_t,
+                  m_running_mean_t,
+                  m_running_var_t,
+                  m_scale_t,
+                  m_bias_t,
+                  m_activations_t,
+                  is_training);
+
+    copy_out_activations();
+  }
+  
+  void bp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
+    assert_always(distconv_enabled());
+
+    // Check execution mode
+    const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
+    
+    assert_always(is_training && m_use_global_stats);    
+    
+    assert0(dc::tensor::View(
+        m_scale_t, get_weights()[0]->get_values().LockedBuffer()));
+    
+    m_bn->backward_stage1(m_prev_activations_t,
+                          m_prev_error_signals_t,
+                          m_mean_t, m_var_t, m_scale_t,
+                          m_scale_gradient_t, m_bias_gradient_t,
+                          m_mean_gradient_t, m_var_gradient_t,
+                          false);
+        
+    // Verbatim copy from bp_compute_gpu
+    // Accumulate gradients
+    if (is_training) {
+      if (m_use_global_stats) {
+        m_comm->allreduce(*m_mean_gradient,
+                          m_mean_gradient->RedundantComm(),
+                          El::mpi::SUM);
+        m_comm->allreduce(*m_var_gradient,
+                          m_var_gradient->RedundantComm(),
+                          El::mpi::SUM);
+      }
+    } else {
+      Zero(*m_mean_gradient);
+      Zero(*m_var_gradient);
+    }
+
+    const int effective_mini_batch_size = this->m_model->get_effective_mini_batch_size();
+    
+    optimizer* scale_optimizer = m_weights[0]->get_optimizer();
+    if (scale_optimizer != nullptr) {
+      scale_optimizer->add_to_gradient_staging(
+          *m_scale_gradient,
+          DataType(1) / effective_mini_batch_size);
+    }
+    optimizer* bias_optimizer = m_weights[1]->get_optimizer();
+    if (bias_optimizer != nullptr) {
+      bias_optimizer->add_to_gradient_staging(
+          *m_bias_gradient,
+          DataType(1) / effective_mini_batch_size);
+    }
+
+    m_bn->backward_stage2(m_prev_activations_t,
+                          m_prev_error_signals_t,
+                          m_mean_t, m_var_t, m_scale_t,
+                          m_mean_gradient_t, m_var_gradient_t,
+                          m_error_signals_t);
+
+    copy_out_error_signals();
+  }
+    
+ protected:
+  dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType> *m_bn;
+  TensorDev m_mean_t;
+  TensorDev m_var_t;
+  TensorDev m_scale_t;
+  TensorDev m_bias_t;
+  TensorDev m_running_mean_t;
+  TensorDev m_running_var_t;
+  TensorDev m_mean_gradient_t;
+  TensorDev m_var_gradient_t;
+  TensorDev m_scale_gradient_t;
+  TensorDev m_bias_gradient_t;
+
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {
+    Layer::setup_tensors_fwd(dists);
+    if (!distconv_enabled()) return;    
+    
+    setup_prev_activations_tensor(dists);
+    setup_activations_tensor(dists);
+    setup_activations_copyout_tensor(dists);
+
+    MPIPrintStreamDebug()
+        << "BN prev_activations: " << m_prev_activations_t
+        << ", activations: " << m_activations_t << "\n";
+
+    const int num_channels = this->m_neuron_dims[0];
+    Array4 per_channel_stat_shape = {1, 1, num_channels, 1};
+    const auto shared_dist = Dist();
+    const LocaleMPI loc(m_comm->get_model_comm().comm, false);    
+    // mean
+    m_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(m_mean_t, this->m_mean->Buffer()));
+    // var
+    m_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(m_var_t, this->m_var->Buffer()));
+    // scale: view to weights[0]
+    m_scale_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    // bias: view to weights[1]
+    m_bias_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    // running_mean: view to weights[2]
+    m_running_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    // running_var: view to weights[3]
+    m_running_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    // scale_gradient
+    m_scale_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_scale_gradient_t, this->m_scale_gradient->Buffer()));
+    // bias_gradient
+    m_bias_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_bias_gradient_t, this->m_bias_gradient->Buffer()));
+    // mean_gradient
+    m_mean_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_mean_gradient_t, this->m_mean_gradient->Buffer()));
+    // var_gradient
+    m_var_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_var_gradient_t, this->m_var_gradient->Buffer()));
+
+    // spatial decomposition requires global communication
+    m_use_global_stats = true;
+  }
+
+  void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
+    Layer::setup_tensors_bwd(dists);    
+    if (!distconv_enabled()) return;
+
+    setup_prev_error_signals_tensor(dists);
+    setup_error_signals_tensor(dists);
+    setup_error_signals_copyout_tensor(dists);
+
+    m_bn = new dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType>(
+        *this->m_cudnn->get_distconv_backend(), m_decay, m_epsilon);
+
+    MPIPrintStreamDebug()
+        << "BN prev_error_signals: " << m_prev_error_signals_t
+        << ", error_signals: " << m_error_signals_t << "\n";
+  }
+  
+#endif
 
 };
 

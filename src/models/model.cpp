@@ -33,12 +33,17 @@
 #include "lbann/layers/transform/dummy.hpp"
 #include "lbann/layers/transform/split.hpp"
 #include "lbann/utils/random.hpp"
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/distconv.hpp"
+#endif
 #include <string>
 #include <unistd.h>
 #include <iomanip>
 #include <queue>
 #include <unordered_set>
 #include <lbann.pb.h>
+#include <set>
+#include <map>
 
 #include "mpi.h"
 
@@ -481,6 +486,64 @@ void model::setup_layers() {
       std::cout << print_layer_description(layer) << std::endl;
     }
   }
+#ifdef LBANN_HAS_DISTCONV
+  // Dist[4]: {x, y, dx, dy}
+  std::map<const Layer*, std::array<Dist, 4>> dists;
+  std::map<Dist*, std::set<Dist*>> invariants;
+  std::set<Dist*> updated;
+  std::set<Dist*> fixed;
+  for (const auto& layer : m_layers) {  
+    layer->setup_distconv();
+  }
+  for (const auto& layer : m_layers) {  
+    layer->setup_tensor_distribution_init(dists, invariants, updated, fixed);
+  }
+  for (const auto& layer : m_layers) {    
+    layer->setup_tensor_distribution_add_adjacent_invariants(
+        dists, invariants);
+  }
+  while (updated.size() > 0) {
+    MPIRootPrintStreamDebug() << "# of updated dists: " << updated.size() << "\n";
+    std::set<Dist*> updated_new;    
+    for (const auto d: updated) {
+      MPIRootPrintStreamDebug() << "Updated: " << *d << "\n";
+      for (auto p: invariants[d]) {
+        MPIRootPrintStreamDebug() << "Invariant: " << *p << "\n";
+        if (d->get_overlap() != p->get_overlap()) {
+          if (fixed.find(p) != fixed.end()) {
+            throw lbann_exception("Cannot satisfy the distconv constraints");            
+          }
+          p->set_overlap(d->get_overlap());
+          updated_new.insert(p);
+        }
+      }
+    }
+    updated = std::move(updated_new);
+  }
+  for (const auto& layer : m_layers) {
+    if (layer->distconv_enabled()) {
+      MPIRootPrintStreamInfo()
+          << layer->get_name()
+          << "; prev_activations_dist: " << dists[layer][0]
+          << ", activations_dist: " << dists[layer][1]
+          << ", error_signals_dist: " << dists[layer][2]
+          << ", prev_error_signals_dist: " << dists[layer][3]
+          << "\n";
+    } else {
+      MPIRootPrintStreamInfo()
+          << layer->get_name() << "; distconv disabled\n";
+    }
+  }
+  for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it) {  
+    (*it)->setup_tensor_distribution_block();
+  }
+  for (const auto& layer : m_layers) {
+    layer->setup_tensors_fwd(dists[layer]);
+  }
+  for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it) {  
+    (*it)->setup_tensors_bwd(dists[*it]);
+  }
+#endif    
 }
 
 void model::setup_weights() {

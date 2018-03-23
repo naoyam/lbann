@@ -68,6 +68,7 @@ WITH_TOPO_AWARE=ON
 INSTRUMENT=
 WITH_ALUMINUM=OFF
 WITH_CONDUIT=OFF
+WITH_DISTCONV=OFF
 WITH_TBINF=OFF
 RECONFIGURE=0
 # In case that autoconf fails during on-demand buid on surface, try the newer
@@ -244,6 +245,9 @@ while :; do
         --with-conduit)
             WITH_CONDUIT=ON
             ;;
+		--with-distconv)
+			WITH_DISTCONV=ON
+			;;
         --instrument)
             INSTRUMENT="-finstrument-functions -ldl"
             ;;
@@ -611,7 +615,12 @@ if [ "${WITH_CUDA}" == "ON" ]; then
 
 	# CUDNN
 	if [ -z "${CUDNN_DIR}" ]; then
-		CUDNN_DIR=/usr/workspace/wsb/brain/cudnn/cudnn-7.1.1/cuda-${CUDA_TOOLKIT_VERSION}_${ARCH}
+		if [ "${CUDA_TOOLKIT_VERSION}" = 8.0 ]; then
+			CUDNN_VERSION=7.1.1
+		else
+			CUDNN_VERSION=7.1.4
+		fi
+		CUDNN_DIR=/usr/workspace/wsb/brain/cudnn/cudnn-${CUDNN_VERSION}/cuda-${CUDA_TOOLKIT_VERSION}_${ARCH}
 	fi
 	if [ ! -d "${CUDNN_DIR}" ]; then
 		echo "Could not find cuDNN at $CUDNN_DIR"
@@ -634,6 +643,11 @@ else
 	OPENBLAS_ARCH=
 fi
 	
+################################################################
+# Temporary Distconv stuff
+################################################################
+DISTCONV_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE/distconv
+
 ################################################################
 # Display parameters
 ################################################################
@@ -732,6 +746,7 @@ ${CMAKE_PATH}/cmake \
 -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
 -D CMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE} \
 -D CMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
+-D CMAKE_CUDA_FLAGS_DEBUG="-G" \
 -D LBANN_SB_BUILD_CNPY=ON \
 -D LBANN_SB_BUILD_HYDROGEN=ON \
 -D LBANN_SB_FWD_HYDROGEN_Hydrogen_ENABLE_CUDA=${WITH_CUDA} \
@@ -759,6 +774,8 @@ ${CMAKE_PATH}/cmake \
 -D LBANN_CONDUIT_DIR=${CONDUIT_DIR} \
 -D LBANN_BUILT_WITH_SPECTRUM=${WITH_SPECTRUM} \
 -D OPENBLAS_ARCH_COMMAND=${OPENBLAS_ARCH} \
+-D LBANN_WITH_DISTCONV=${WITH_DISTCONV} \
+-D LBANN_SB_FWD_LBANN_DISTCONV_DIR=${DISTCONV_DIR} \
 ${SUPERBUILD_DIR}
 EOF
 )

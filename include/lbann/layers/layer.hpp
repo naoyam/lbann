@@ -29,6 +29,9 @@
 
 #include "lbann/base.hpp"
 #include "lbann/comm.hpp"
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/distconv.hpp"
+#endif
 #include "lbann/utils/summary.hpp"
 #include "lbann/optimizers/optimizer.hpp"
 #include "lbann/utils/exception.hpp"
@@ -38,6 +41,9 @@
 #include <lbann.pb.h>
 #include <string>
 #include <vector>
+#include <set>
+#include <map>
+#include <array>
 
 namespace lbann {
 
@@ -58,7 +64,30 @@ struct ParallelStrategy {
   int filter_groups = 0;
   /** Number of times the layer is replicated (for FC layers right now). */
   int replications = 0;
+  bool operator==(const ParallelStrategy &ps) const {
+    return sample_groups == ps.sample_groups &&
+        height_groups == ps.height_groups &&
+        width_groups == ps.width_groups &&
+        channel_groups == ps.channel_groups &&
+        filter_groups == ps.filter_groups &&
+        replications == ps.replications;
+  }
+  bool operator!=(const ParallelStrategy &ps) const {
+    return !(*this == ps);
+  }
 };
+
+inline std::ostream &operator<<(std::ostream &os,
+                                const ParallelStrategy &ps) {
+  os << "{" << ps.sample_groups
+     << ", " << ps.height_groups
+     << ", " << ps.width_groups
+     << ", " << ps.channel_groups
+     << ", " << ps.filter_groups
+     << ", " << ps.replications
+     << "}";
+  return os;
+}
 
 /** Abstract base class for neural network layers.
  *  A layer takes input tensors ("previous activations") and applies a
@@ -363,6 +392,7 @@ class Layer {
 
   /** Get the parallel strategy for the layer. */
   ParallelStrategy& get_parallel_strategy() { return m_parallel_strategy; }
+  const ParallelStrategy& get_parallel_strategy() const { return m_parallel_strategy; }
 
  protected:
 
@@ -531,8 +561,150 @@ class Layer {
    */
   std::string m_name;
 
+
   /** Parallel strategy for the layer. */
   ParallelStrategy m_parallel_strategy;
+
+#ifdef LBANN_HAS_DISTCONV
+ public:
+  virtual void setup_distconv();
+  virtual void setup_tensor_distribution_init(
+      std::map<const Layer*, std::array<Dist, 4>> &dists, 
+      std::map<Dist*, std::set<Dist*>> &invariants,
+      std::set<Dist*> &updated,
+      std::set<Dist*> &fixed);
+  virtual void setup_tensor_distribution_add_adjacent_invariants(
+      std::map<const Layer*, std::array<Dist, 4>> &dists,
+      std::map<Dist*, std::set<Dist*>> &invariants);
+  virtual void setup_tensor_distribution_block();
+  // TODO: use dists
+  virtual void setup_tensors_fwd(const std::array<Dist, 4> &dists);
+  virtual void setup_prev_activations_tensor(const std::array<Dist, 4> &dists);
+  virtual Array4 get_activations_tensor_local_shape() const;
+  virtual void setup_activations_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_activations_copyout_tensor(const std::array<Dist, 4> &dists);  
+  virtual void setup_tensors_bwd(const std::array<Dist, 4> &dists);
+  virtual void setup_prev_error_signals_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_error_signals_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_error_signals_copyout_tensor(const std::array<Dist, 4> &dists);
+  virtual Array4 get_prev_activations_overlap() const;
+  virtual Array4 get_activations_overlap() const;  
+  virtual Array4 get_prev_error_signals_overlap() const;
+  virtual Array4 get_error_signals_overlap() const;
+  virtual Array4 get_input_decomposition_block() const;
+  virtual Array4 get_output_decomposition_block() const;
+#if 0
+  virtual const Dist &get_prev_activations_distribution() const {
+    return m_prev_activations_dist;
+  }
+  virtual const Dist &get_activations_distribution() const {
+    return m_activations_dist;
+  }
+  virtual const Dist &get_prev_error_signals_distribution() const {
+    return m_prev_error_signals_dist;
+  }
+  virtual const Dist &get_error_signals_distribution() const {
+    return m_error_signals_dist;
+  }
+#endif
+  
+  // REFACTORING: returning non-const tensor should be protected
+  virtual const TensorDev &get_activations_t() const;
+  virtual const TensorDev &get_error_signals_t() const;  
+  //virtual ConstTensorDev get_activations_const_view() const;
+  //virtual ConstTensorDev get_prev_activations_const_view() const;
+
+  bool distconv_enabled() const {
+    return m_distconv_enabled;
+  }
+  void disable_distconv() {
+    m_distconv_enabled = false;
+  }
+  
+ protected:
+  virtual bool using_distconv() const { return false; }
+  virtual void fp_setup_distconv(int mini_batch_size);
+  virtual void bp_setup_distconv(int mini_batch_size);  
+  
+  virtual Array4 get_strides() const;
+
+  // Copis and converts input or output tensors when necessary
+  void ensure_prev_activations();
+  void copy_out_activations();
+  void ensure_prev_error_signals();
+  void copy_out_error_signals();
+
+  // negative value disables early termination. DISTCONV_EARLY_TERMINATE
+  // environment value will override if set.
+  int m_exit_count = -1;
+  void early_terminate();
+  bool early_terminate_last_iteration() const;
+
+  template <typename Tensor>
+  void dump_tensor(const Tensor &t, const std::string &path) const {
+    if (getenv("DISTCONV_DUMP")) {
+      if (early_terminate_last_iteration()) {
+        MPIPrintStreamDebug() << "Dumping tensor to " << path << "\n";
+        cudaDeviceSynchronize();
+        dc::dump_tensor(t, path, true);
+      }
+    }
+  }
+  void dump_activations() const {
+    dump_tensor(m_activations_t, get_name() + "_activations");
+  }
+  void dump_reference_activations() {
+    assert0(dc::tensor::View(
+        m_activations_copyout, get_activations().LockedBuffer()));
+    dump_tensor(m_activations_copyout,
+                get_name() + "_activations_original");
+  }
+  void dump_error_signals() const {
+    dump_tensor(m_error_signals_t, get_name() + "_error_signals");
+  }
+  void dump_reference_error_signals() {
+    assert0(dc::tensor::View(
+        m_error_signals_copyout, get_error_signals().LockedBuffer()));
+    dump_tensor(m_error_signals_copyout,
+                get_name() + "_error_signals_original");
+  }
+  
+  bool m_parent_copy_in_required = false;
+  bool m_parent_shuffle_required = false;
+  bool m_child_copy_out_required = false;
+  bool m_child_shuffle_required = false;  
+  Array4 m_input_decomposition_block;
+  Array4 m_output_decomposition_block;  
+  /** Previous activation tensor */
+  // Created once, view initialized at fp_setup_data
+  TensorDev m_prev_activations_t;
+  /** View to Elemental matrix of previous activations */
+  // Created once, copied from m_prev_activations_t at fp_setup_data
+  TensorDev m_prev_activations_const_view;
+  /** Activation tensor */
+  // Created once, copied back to m_activations_e after fp_compute
+  TensorDev m_activations_t;
+  /** Elemental-format activation matrix */  
+  TensorDev m_activations_copyout;
+  TensorShuffler *m_prev_activations_shuffler = nullptr;
+  TensorShuffler *m_prev_activations_shuffler_last_mb[3];
+  TensorShuffler *m_activations_shuffler = nullptr;
+  TensorShuffler *m_activations_shuffler_last_mb[3];
+  /** Previous error signal tensor */
+  TensorDev m_prev_error_signals_t;
+  /** View to Elemental matrix */
+  TensorDev m_prev_error_signals_const_view;
+  /** Error signal tensor */
+  TensorDev m_error_signals_t;
+  /** Elemental-format matrix */
+  TensorDev m_error_signals_copyout;
+  TensorShuffler *m_prev_error_signals_shuffler = nullptr;
+  TensorShuffler *m_prev_error_signals_shuffler_last_mb[3];
+  TensorShuffler *m_error_signals_shuffler = nullptr;
+  TensorShuffler *m_error_signals_shuffler_last_mb[3];
+ private:
+  bool m_distconv_enabled = false;
+#endif // LBANN_HAS_DISTCONV
 
  private:
 

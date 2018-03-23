@@ -29,6 +29,10 @@
 
 #include "lbann/layers/activations/activation.hpp"
 #include "lbann/utils/cudnn_wrapper.hpp"
+#include "lbann_config.hpp"
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/distconv.hpp"
+#endif
 
 namespace lbann {
 
@@ -72,7 +76,7 @@ class relu_layer : public entrywise_activation_layer {
   #endif // LBANN_HAS_CUDNN
     return *this;
   }
-
+  
   ~relu_layer() override {
   #ifdef LBANN_HAS_CUDNN
     if (m_activation_cudnn_desc != nullptr) {
@@ -107,7 +111,7 @@ class relu_layer : public entrywise_activation_layer {
                                              CUDNN_ACTIVATION_RELU,
                                              CUDNN_PROPAGATE_NAN,
                                              0.0));
-  #endif // LBANN_HAS_CUDNN
+   #endif // LBANN_HAS_CUDNN
   }
 
  protected:
@@ -127,6 +131,14 @@ class relu_layer : public entrywise_activation_layer {
   #ifndef LBANN_HAS_CUDNN
     LBANN_ERROR("cuDNN not detected");
   #else
+#ifdef LBANN_HAS_DISTCONV
+    if (distconv_enabled()) {
+      fp_compute_distconv();
+      if (!early_terminate_last_iteration()) {
+        return;
+      }
+    }
+#endif
     const DataType one = 1;
     const DataType zero = 0;
     CHECK_CUDNN(cudnnActivationForward(this->m_cudnn->get_handle(),
@@ -137,13 +149,29 @@ class relu_layer : public entrywise_activation_layer {
                                        &zero,
                                        this->m_activations_cudnn_desc,
                                        get_activations().Buffer()));
+#ifdef LBANN_HAS_DISTCONV
+    if (distconv_enabled() && early_terminate_last_iteration()) {
+      dump_reference_activations();
+    }
+#endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
+  
 
   void bp_compute_gpu() override {
   #ifndef LBANN_HAS_CUDNN
     LBANN_ERROR("cuDNN not detected");
   #else
+#ifdef LBANN_HAS_DISTCONV
+    if (distconv_enabled()) {
+      bp_compute_distconv();
+      if (early_terminate_last_iteration()) {
+        dump_reference_error_signals();
+      } else {
+        return;
+      }
+    }
+#endif // LBANN_HAS_DISTCONV
     const DataType one = 1;
     CHECK_CUDNN(cudnnActivationBackward(this->m_cudnn->get_handle(),
                                         m_activation_cudnn_desc,
@@ -157,8 +185,116 @@ class relu_layer : public entrywise_activation_layer {
                                         &one,
                                         this->m_error_signals_cudnn_desc,
                                         get_error_signals().Buffer()));
+#ifdef LBANN_HAS_DISTCONV
+    if (distconv_enabled() && early_terminate_last_iteration()) {
+      dump_reference_error_signals();
+    }
+#endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
+
+#ifdef LBANN_HAS_DISTCONV
+ public:
+
+  void setup_tensor_distribution_init(
+      std::map<const Layer*, std::array<Dist, 4>> &dists,  
+      std::map<Dist*, std::set<Dist*>> &invariants,
+      std::set<Dist*> &updated,
+      std::set<Dist*> &fixed) override {
+    Layer::setup_tensor_distribution_init(
+        dists, invariants, updated, fixed);
+    if (!distconv_enabled()) return;
+    auto &layer_dists = dists[this];
+#ifdef DISTCONV_USE_SAME_RELU_CALL_AS_LBANN
+    // This isn't necessary for cuDNN, but necessary to make it work
+    // with the ordering of ReLU parameters used in LBANN
+    // x == y
+    invariants[&layer_dists[0]].insert(
+        &layer_dists[1]);
+    invariants[&layer_dists[1]].insert(
+        &layer_dists[0]);
+#endif    
+    // x == dx
+    invariants[&layer_dists[0]].insert(
+        &layer_dists[2]);
+    invariants[&layer_dists[2]].insert(
+        &layer_dists[0]);
+    //y == dy
+    invariants[&layer_dists[1]].insert(
+        &layer_dists[3]);
+    invariants[&layer_dists[3]].insert(
+        &layer_dists[1]);
+  }
+
+  void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {   
+    Layer::setup_tensors_fwd(dists);    
+    if (!distconv_enabled()) return;
+    
+    setup_prev_activations_tensor(dists);
+    setup_activations_tensor(dists);
+    setup_activations_copyout_tensor(dists);    
+  }
+
+  void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
+    Layer::setup_tensors_bwd(dists);    
+    if (!distconv_enabled()) return;
+    
+    setup_prev_error_signals_tensor(dists);
+    setup_error_signals_tensor(dists);
+    setup_error_signals_copyout_tensor(dists);
+
+    // Init the dc::Pooling layer
+    m_relu = new dc::ReLU<dc::cudnn::BackendCUDNN>(
+        *this->m_cudnn->get_distconv_backend());
+
+    m_relu->setup(m_prev_activations_t, m_activations_t,
+                  m_error_signals_t, m_prev_error_signals_t);
+  }
+  
+  void fp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";    
+    assert_always(distconv_enabled());
+    
+    // Useful constants
+    const DataType one = 1;
+    const DataType zero = 0;
+    
+    m_relu->forward(one, m_prev_activations_t, zero, m_activations_t);
+
+    copy_out_activations();
+  }
+
+  void bp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";    
+    assert_always(distconv_enabled());
+    const DataType one = 1;
+
+#ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS
+    m_error_signals_t.zero();
+    m_relu->backward(one, m_activations_t, m_prev_error_signals_t,
+                     m_prev_activations_t, one, m_error_signals_t);
+#else    
+    m_relu->backward(one, m_activations_t, m_prev_error_signals_t,
+                     m_prev_activations_t, DataType(0), m_error_signals_t);
+#endif
+    copy_out_error_signals();
+  }
+  
+ protected:
+  dc::ReLU<dc::cudnn::BackendCUDNN> *m_relu;
+
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
+#endif
 
 };
 
