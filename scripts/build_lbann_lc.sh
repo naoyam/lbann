@@ -67,7 +67,11 @@ WITH_CUDA=
 WITH_TOPO_AWARE=ON
 INSTRUMENT=
 WITH_ALUMINUM=OFF
+<<<<<<< f8f05fff512fcf90fc9008ec02494e04b1acd8f3
 WITH_CONDUIT=OFF
+=======
+WITH_DISTCONV=OFF
+>>>>>>> Forward and backward convolution
 WITH_TBINF=OFF
 RECONFIGURE=0
 # In case that autoconf fails during on-demand buid on surface, try the newer
@@ -244,6 +248,9 @@ while :; do
         --with-conduit)
             WITH_CONDUIT=ON
             ;;
+		--with-distconv)
+			WITH_DISTCONV=ON
+			;;
         --instrument)
             INSTRUMENT="-finstrument-functions -ldl"
             ;;
@@ -759,6 +766,7 @@ ${CMAKE_PATH}/cmake \
 -D LBANN_CONDUIT_DIR=${CONDUIT_DIR} \
 -D LBANN_BUILT_WITH_SPECTRUM=${WITH_SPECTRUM} \
 -D OPENBLAS_ARCH_COMMAND=${OPENBLAS_ARCH} \
+-D LBANN_WITH_DISTCONV=${WITH_DISTCONV}
 ${SUPERBUILD_DIR}
 EOF
 )
