@@ -90,7 +90,18 @@ void lbann_callback_profiler::on_batch_begin(model *m) {
 }
 
 void lbann_callback_profiler::on_batch_end(model *m) {
-  prof_region_end("batch");  
+  prof_region_end("batch");
+  --m_num_iterations;
+  if (m_num_iterations == 0) {
+    // terminate
+    FORCE_CHECK_CUDA(cudaDeviceSynchronize());    
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (m->get_comm()->am_world_master()) {
+      std::cout << "Terminated at callback profiler" << std::endl;
+    }
+    finalize();
+    exit(0);
+  }
 }
 
 void lbann_callback_profiler::on_forward_prop_begin(model *m) {

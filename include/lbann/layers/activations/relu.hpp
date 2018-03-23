@@ -29,6 +29,7 @@
 
 #include "lbann/layers/activations/activation.hpp"
 #include "lbann/utils/cudnn.hpp"
+#include "lbann/utils/distconv.hpp"
 
 namespace lbann {
 
@@ -46,6 +47,9 @@ class relu_layer : public entrywise_activation_layer {
   /** Tensor cuDNN descriptors. */
   cudnn::entrywise_layer_tensor_manager m_tensors_cudnn_desc;
 #endif // LBANN_HAS_CUDNN
+#ifdef LBANN_HAS_DISTCONV
+  dc::ReLU *m_relu;
+#endif
 
  public:
 
@@ -119,6 +123,39 @@ class relu_layer : public entrywise_activation_layer {
 #endif // LBANN_HAS_CUDNN
   }
 
+#ifdef LBANN_HAS_DISTCONV
+  // Generic implementation. Specialized implementation is in the
+  // source file.
+  void setup_tensor_distribution_init(
+      std::map<const Layer*, std::array<dc::Dist, 4>> &dists,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::set<dc::Dist*> &updated,
+      std::set<dc::Dist*> &fixed) override {
+    Layer::setup_tensor_distribution_init(
+        dists, invariants, updated, fixed);
+  }
+
+  void setup_tensors_fwd(const std::array<dc::Dist, 4> &dists) override {
+    Layer::setup_tensors_fwd(dists);
+  }
+
+  void setup_tensors_bwd(const std::array<dc::Dist, 4> &dists) override {
+    Layer::setup_tensors_bwd(dists);
+  }
+
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+#endif // LBANN_HAS_DISTCONV
+
  protected:
 
   DataType activation(DataType x) const override {
@@ -132,6 +169,10 @@ class relu_layer : public entrywise_activation_layer {
   void fp_compute() override;
   void bp_compute() override;
 
+#ifdef LBANN_HAS_DISTCONV  
+  void fp_compute_distconv();
+  void bp_compute_distconv();
+#endif
 };
 
 } // namespace lbann
