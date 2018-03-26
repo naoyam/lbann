@@ -29,6 +29,8 @@
 
 #include "lbann/layers/activations/activation.hpp"
 #include "lbann/utils/cudnn_wrapper.hpp"
+#include "lbann_config.hpp"
+#include "lbann/distconv.hpp"
 
 namespace lbann {
 
@@ -107,7 +109,12 @@ class relu_layer : public entrywise_activation_layer {
                                              CUDNN_ACTIVATION_RELU,
                                              CUDNN_PROPAGATE_NAN,
                                              0.0));
-  #endif // LBANN_HAS_CUDNN
+
+#ifdef LBANN_HAS_DISTCONV
+    setup_tensors();
+#endif
+    
+#endif // LBANN_HAS_CUDNN
   }
 
  protected:
@@ -129,6 +136,7 @@ class relu_layer : public entrywise_activation_layer {
   #else
     const DataType one = 1;
     const DataType zero = 0;
+#ifndef LBANN_HAS_DISTCONV    
     CHECK_CUDNN(cudnnActivationForward(this->m_cudnn->get_handle(),
                                        m_activation_cudnn_desc,
                                        &one,
@@ -137,6 +145,16 @@ class relu_layer : public entrywise_activation_layer {
                                        &zero,
                                        this->m_activations_cudnn_desc,
                                        get_activations().Buffer()));
+#else
+    assert0(dc::tensor::View(
+        m_prev_activations_e,
+        m_prev_activations_d[0].get_locked_data(0)));
+    assert0(dc::tensor::View(
+        m_activations_e, m_activations_d[0].get_data(0)));
+    m_relu->set_num_samples(this->m_model->get_current_mini_batch_size());    
+    m_relu->forward(one, m_prev_activations_e,
+                    zero, m_activations_e);
+#endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
 
@@ -145,6 +163,7 @@ class relu_layer : public entrywise_activation_layer {
     LBANN_ERROR("cuDNN not detected");
   #else
     const DataType one = 1;
+#ifndef LBANN_HAS_DISTCONV    
     CHECK_CUDNN(cudnnActivationBackward(this->m_cudnn->get_handle(),
                                         m_activation_cudnn_desc,
                                         &one,
@@ -157,8 +176,116 @@ class relu_layer : public entrywise_activation_layer {
                                         &one,
                                         this->m_error_signals_cudnn_desc,
                                         get_error_signals().Buffer()));
+#else
+    assert0(dc::tensor::View(
+        m_activations_e, m_activations_d[0].get_data(0)));
+    assert0(dc::tensor::View(
+        m_prev_activations_e,
+        m_prev_activations_d[0].get_locked_data(0)));
+    assert0(dc::tensor::View(
+        m_prev_error_signals_e,
+        m_prev_error_signals_d[0].get_locked_data(0)));
+    assert0(dc::tensor::View(
+        m_error_signals_e,
+        m_error_signals_d[0].get_data(0)));
+    m_relu->backward(one, m_activations_e, m_prev_error_signals_e,
+                     m_prev_activations_e, one,
+                     m_error_signals_e);
+#endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
+
+  void setup_tensors() {
+#ifndef LBANN_HAS_DISTCONV
+    throw lbann_exception(
+        std::string {} + __FILE__ + " " + std::to_string(__LINE__) + " :: " +
+        "Layer: DISTCONV not detected");
+#else
+    MPIPrintStreamDebug()
+        << "relu: setup_tensors."
+        << "\n";
+    
+    m_distconv_enabled = true;
+
+    // REFACTORING: duplicated at convolution::setup_tensors
+    Array4 input_tensor_shape =
+        {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+         m_prev_neuron_dims[0],
+         this->m_model->get_max_mini_batch_size()};
+
+    Array4 input_local_shape = input_tensor_shape;
+    // Assuming single GPU per rank
+    input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+    Array4 division_block_size = {1, 1, 1, 1};
+
+    LocaleMPI loc(m_comm->get_model_comm().comm);
+    // Sample distribution
+    Array4 sample_decomposition = {1, 1, 1, m_comm->get_procs_per_model()};
+
+    // prev_activations
+    m_prev_activations_e = ConstTensorDev(input_tensor_shape, loc,
+                                          Dist(sample_decomposition),
+                                          input_local_shape,
+                                          division_block_size);
+    assert0(dc::tensor::View(
+        m_prev_activations_e,
+        m_prev_activations_d[0].get_locked_data(0)));
+
+    Array4 output_tensor_shape = {m_neuron_dims[2], m_neuron_dims[1],
+                                  m_neuron_dims[0],
+                                  this->m_model->get_max_mini_batch_size()};
+    Array4 output_local_shape = output_tensor_shape;
+    output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+
+    // activations
+    m_activations_e = TensorDev(output_tensor_shape, loc,
+                                Dist(sample_decomposition),
+                                output_local_shape,
+                                division_block_size);
+    assert0(dc::tensor::View(
+        m_activations_e, m_activations_d[0].get_data(0)));
+    
+
+    // prev_error_signals
+    m_prev_error_signals_e = ConstTensorDev(output_tensor_shape, loc,
+                                            Dist(sample_decomposition),
+                                            output_local_shape,
+                                            division_block_size);
+    assert0(dc::tensor::View(
+        m_prev_error_signals_e,
+        m_prev_error_signals_d[0].get_locked_data(0)));
+
+    // error_signals
+    m_error_signals_e = TensorDev(input_tensor_shape, loc,
+                                  Dist(sample_decomposition),
+                                  input_local_shape, division_block_size);
+    assert0(dc::tensor::View(
+        m_error_signals_e,
+        m_error_signals_d[0].get_data(0)));
+
+    // Init the dc::Pooling layer
+    m_relu = new dc::ReLU<dc::cudnn::BackendCUDNN>(
+        *this->m_cudnn->get_distconv_backend());
+
+    m_relu->setup(m_prev_activations_e,
+                  m_activations_e,
+                  m_error_signals_e,
+                  m_prev_error_signals_e);
+#endif
+  }
+  
+
+#ifdef LBANN_HAS_DISTCONV
+  bool m_distconv_enabled = false;
+  dc::ReLU<dc::cudnn::BackendCUDNN> *m_relu;
+  // Forward prop
+  ConstTensorDev m_prev_activations_e;
+  TensorDev m_activations_e;
+  // Backward prop
+  ConstTensorDev m_prev_error_signals_e;
+  TensorDev m_error_signals_e;
+#endif
+  
 
 };
 
