@@ -603,7 +603,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
   }
 
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
-    Layer::setup_tensors_bwd(dists);        
+    Layer::setup_tensors_bwd(dists);
+    if (!m_distconv_enabled) return;    
     // REFACTORING: this is repeated again
     const Array4 input_tensor_shape =
         {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
