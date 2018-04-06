@@ -371,6 +371,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
                 "error_signals_spatial.txt");
 
     if (m_parent_copy_required) {
+      assert0(dc::tensor::View(
+          m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
       assert0(distconv::tensor::Copy(
           m_error_signals_copyout, m_error_signals_t));
     }
