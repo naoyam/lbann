@@ -37,8 +37,6 @@
 #include "lbann_config.hpp"
 #include "lbann/distconv.hpp"
 
-#define CONV_DEBUG_FLAG (false)
-
 namespace lbann {
 
 /// Convolution layer
@@ -196,20 +194,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
  protected:
 
-#ifdef LBANN_HAS_DISTCONV
-  void early_terminate() {
-    if (getenv("DISTCONV_EARLY_TERMINATE")) {
-      --m_exit_count;
-      if (m_exit_count == 0) {
-        MPIPrintStreamDebug() << "Early terminate\n";
-        MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Finalize();
-        cudaDeviceReset();
-        exit(0);
-      }
-    }
-  }
-#endif
   
   void fp_compute() override {
     if(this->using_gpus()) {
@@ -218,15 +202,28 @@ class convolution_layer : public base_convolution_layer<Dev> {
         early_terminate();
         apply_convolution_distconv();
         apply_bias_distconv();
+#if 1
+        dump_tensor(m_activations_t,
+                    get_name() + "_activations.txt");
+#endif
         // activations may be updated with bias, so its copy should
         // be done after applying bias
         if (m_child_copy_required) {
-          MPIPrintStreamDebug() << "Copying back to sample parallel\n";          
+          MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
           assert0(dc::tensor::View(
               m_activations_copyout, m_activations_d[0].get_data(0)));
           assert0(dc::tensor::Copy(
               m_activations_copyout, m_activations_t));
-          dump_tensor(m_activations_copyout, "activations_original.txt"); 
+        }
+        if (m_exit_count == 0) {
+          apply_convolution_cudnn(true);
+          apply_bias_cudnn();
+          assert0(dc::tensor::View(
+              m_activations_copyout, m_activations_d[0].get_data(0)));
+#if 1
+          dump_tensor(m_activations_copyout,
+                      get_name() + "_activations_original.txt");
+#endif
         }
       } else {
         base_convolution_layer<Dev>::apply_convolution_cudnn(true);
@@ -249,6 +246,16 @@ class convolution_layer : public base_convolution_layer<Dev> {
         m_prev_error_signals_redistributed = false;
         compute_gradients_distconv();
         apply_transposed_convolution_distconv();
+        if (m_exit_count == 0) {
+          dump_tensor(m_error_signals_t,
+                      get_name() + "_error_signals.txt");
+          compute_gradients_cudnn(false);
+          apply_transposed_convolution_cudnn(false);
+          assert0(dc::tensor::View(
+              m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+          dump_tensor(m_error_signals_copyout,
+                      get_name() + "_error_signals_original.txt");
+        }
       } else {
         base_convolution_layer<Dev>::compute_gradients_cudnn(false);
         base_convolution_layer<Dev>::apply_transposed_convolution_cudnn(false);
@@ -280,11 +287,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
     m_conv->set_num_samples(this->m_model->get_current_mini_batch_size());
     
     if (m_parent_copy_required) {
-      MPIPrintStreamDebug() << "Copying to spatial decomposition\n";
+      MPIPrintStreamDebug() << "Copying from sample decomposition\n";  
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
-      //dump_tensor(m_prev_activations_const_view, "prev_activations_original.txt");
       assert0(dc::tensor::Copy(
           m_prev_activations_t, m_prev_activations_const_view));
     } else {
@@ -292,23 +298,20 @@ class convolution_layer : public base_convolution_layer<Dev> {
           << "Directly reading activations of previous layer\n";
     }
 
-    //dump_tensor(m_activations_t, "prev_activations_spatial.txt");    
-
     assert0(dc::tensor::View(
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));
 
     m_conv->forward(DataType(1.0), m_prev_activations_t, m_kernel_t,
                     DataType(0.0), m_activations_t);
 
-    //dump_tensor(m_activations_t, "activations_spatial.txt");        
 #endif
   }
 
   void apply_bias_distconv() {
 #ifndef LBANN_HAS_DISTCONV
     throw lbann_exception(
-        std::string {} + __FILE__ + " " + std::to_string(__LINE__) + " :: " +
-        "Layer: DISTCONV not detected");
+        std::string {} + __FILE__ + " " + std::to_string(__LINE__)
+        + " :: " + "Layer: DISTCONV not detected");
 #else
     if (m_bias_scaling_factor == DataType(0)) return;
 
@@ -324,10 +327,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
   void apply_transposed_convolution_distconv() {
 #ifndef LBANN_HAS_DISTCONV
     throw lbann_exception(
-        std::string {} + __FILE__ + " " + std::to_string(__LINE__) + " :: " +
-        "Layer: DISTCONV not detected");
+        std::string {} + __FILE__ + " " + std::to_string(__LINE__)
+        + " :: " + "Layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << "Backward convolution\n";
+    MPIPrintStreamDebug() << get_name() << ": Backward convolution\n";
 
     // input: m_prev_error_signals_d[0]
     // kernel: m_weights[0]->get_values_gpu()
@@ -337,7 +340,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));
 
     if (m_child_copy_required) {
-      if (!m_prev_error_signals_redistributed) {      
+      if (!m_prev_error_signals_redistributed) {
+        MPIPrintStreamDebug() << "Copying from sample decomposition\n";
         assert0(dc::tensor::View(
             m_prev_error_signals_const_view,
             m_prev_error_signals_d[0].get_locked_data(0)));
@@ -345,14 +349,14 @@ class convolution_layer : public base_convolution_layer<Dev> {
             m_prev_error_signals_t, m_prev_error_signals_const_view));
         m_prev_error_signals_redistributed = true;
       }
-      dump_tensor(m_prev_error_signals_const_view,
-                  "prev_error_signals_original.txt");
+      //dump_tensor(m_prev_error_signals_const_view,
+      //"prev_error_signals_original.txt");
     }
 
-    dump_tensor(m_prev_error_signals_t,
-                "prev_error_signals_spatial.txt");
+    //dump_tensor(m_prev_error_signals_t,
+    //"prev_error_signals_spatial.txt");
 
-#if 0    
+#if 0
     // The beta parameter is non-zero, so need to copy the error signals
     if (m_parent_copy_required) {
       assert0(dc::tensor::View(
@@ -360,21 +364,23 @@ class convolution_layer : public base_convolution_layer<Dev> {
       assert0(dc::tensor::Copy(
           m_error_signals_t, m_error_signals_copyout));
     }
-#endif
+#else
     m_error_signals_t.zero();
+#endif
 
     MPIPrintStreamDebug() << "Calling backward_data\n";
     m_conv->backward_data(DataType(1.0), m_kernel_t, m_prev_error_signals_t,
                           DataType(1.0), m_error_signals_t);
 
-    dump_tensor(m_error_signals_t,
-                "error_signals_spatial.txt");
 
     if (m_parent_copy_required) {
-      assert0(dc::tensor::View(
-          m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-      assert0(distconv::tensor::Copy(
-          m_error_signals_copyout, m_error_signals_t));
+      if (m_exit_count != 0) {
+        MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
+        assert0(dc::tensor::View(
+            m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+        assert0(distconv::tensor::Copy(
+            m_error_signals_copyout, m_error_signals_t));
+      }
     }
 #endif    
   }
@@ -382,12 +388,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
   void compute_gradients_distconv() {
 #ifndef LBANN_HAS_DISTCONV
     throw lbann_exception(
-        std::string {} + __FILE__ + " " + std::to_string(__LINE__) + " :: " +
-        "Layer: DISTCONV not detected");
+        std::string {} + __FILE__ + " " + std::to_string(__LINE__)
+        + " :: " + "Layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << "Compute gradients\n";
+    MPIPrintStreamDebug() << get_name() << ": Compute gradients\n";
 
-    if (m_child_copy_required || CONV_DEBUG_FLAG) {
+    if (m_child_copy_required) {
       assert0(dc::tensor::View(
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
@@ -400,7 +406,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     if (bias_optimizer != nullptr && m_bias_scaling_factor != DataType(0)) {
       MPIPrintStreamDebug() << "Compute bias gradients\n";      
       // Copy to sample distribution
-      if ((m_child_copy_required || CONV_DEBUG_FLAG) && !m_prev_error_signals_redistributed) {
+      if (m_child_copy_required && !m_prev_error_signals_redistributed) {
         assert0(dc::tensor::Copy(
             m_prev_error_signals_t, m_prev_error_signals_const_view));
         m_prev_error_signals_redistributed = true;
@@ -410,8 +416,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
       m_conv->backward_bias(DataType(1.0), m_prev_error_signals_t,
                             DataType(0.0), m_bias_gradient_e, false);
       const DataType bias_scale = m_bias_scaling_factor / effective_mini_batch_size;
-      bias_optimizer->add_to_gradient_staging(m_bias_gradient_d,
-                                              bias_scale);
+      if (m_exit_count != 0) {
+        bias_optimizer->add_to_gradient_staging(m_bias_gradient_d,
+                                                bias_scale);
+      }
     }
 
     optimizer* kernel_optimizer = m_weights[0]->get_optimizer();
@@ -423,7 +431,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
         m_kernel_gradient_e, m_kernel_gradient_d.get_data(0)));
     
     // Copy to sample distribution
-    if ((m_child_copy_required || CONV_DEBUG_FLAG) && !m_prev_error_signals_redistributed) {
+    if (m_child_copy_required && !m_prev_error_signals_redistributed) {
       assert0(dc::tensor::Copy(
           m_prev_error_signals_t, m_prev_error_signals_const_view));
       m_prev_error_signals_redistributed = true;
@@ -435,8 +443,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
     // Add gradient contribution
     const DataType kernel_scale = DataType(1) / effective_mini_batch_size;
-    kernel_optimizer->add_to_gradient_staging(m_kernel_gradient_d,
-                                              kernel_scale);
+    if (m_exit_count != 0) {
+      kernel_optimizer->add_to_gradient_staging(m_kernel_gradient_d,
+                                                kernel_scale);
+    }
 #endif    
   }
 
@@ -454,7 +464,18 @@ class convolution_layer : public base_convolution_layer<Dev> {
       MPIPrintStreamDebug() << "Unsupported as tensor dimensions not devisible by strides\n";
       return false;
     }
+#if 1
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    //if (get_name() == "pool2" || get_name() == "conv3") {
     return true;
+#endif
+    //return true;
   }
   
   Array4 get_prev_activations_overlap() const override {
@@ -512,7 +533,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
   void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {    
     Layer::setup_tensors_fwd(dists);
     if (!m_distconv_enabled) return;
-    
+
     std::stringstream ss;
     dc::util::print_vector(ss, m_kernel_dims.begin(), m_kernel_dims.end());
     MPIPrintStreamDebug()
@@ -559,10 +580,9 @@ class convolution_layer : public base_convolution_layer<Dev> {
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
 
-    if (m_child_copy_required) {
-      m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
-                                        output_local_shape, sample_block_size);
-    }
+    //if (m_child_copy_required) {
+    m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
+                                      output_local_shape, sample_block_size);
 
     Array4 kernel_shape = {m_kernel_dims[3], m_kernel_dims[2],
                            m_kernel_dims[1], m_kernel_dims[0]};
@@ -623,12 +643,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
     output_local_shape[3] = m_max_mini_batch_size_per_gpu;
     
     // prev_error_signals
-    if (m_child_copy_required || CONV_DEBUG_FLAG) {
+    if (m_child_copy_required) {
       m_prev_error_signals_const_view = ConstTensorDev(output_tensor_shape, loc,
                                                        sample_dist,
                                                        output_local_shape,
                                                        sample_block_size);
-      m_prev_error_signals_t = TensorDev(output_local_shape, loc,
+      m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
                                          spatial_local_size,
                                          m_output_decomposition_block);
@@ -650,11 +670,18 @@ class convolution_layer : public base_convolution_layer<Dev> {
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();
 
-    if (m_parent_copy_required) {
-      m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
-                                           input_local_shape, sample_block_size);
-    }
+    //if (m_parent_copy_required) {
+    m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
+                                        input_local_shape, sample_block_size);
 
+    if (getenv("DISTCONV_DETERMINISTIC")) {
+      // Same algorithm as LBANN
+      m_fwd_algo = "IMPLICIT_GEMM";
+      // Deterministic algorithm
+      m_bwd_data_algo = "ALGO1";
+      m_bwd_filter_algo = "ALGO1";
+    }
+    
     m_conv->setup(m_prev_activations_t,
                   m_kernel_t, m_activations_t,
                   m_error_signals_t, m_kernel_gradient_e,
@@ -666,12 +693,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
   }
   
  protected:
-  template <typename Tensor>
-  void dump_tensor(const Tensor &t, const std::string &path) {
-    if (m_dump_tensors) {
-      dc::dump_tensor(t, path);
-    }
-  }
 
   dc::Convolution<dc::cudnn::BackendCUDNN> *m_conv;
   TensorDev m_kernel_t;
@@ -687,8 +708,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
   bool m_prev_error_signals_redistributed = false;
 
   // For debugging
-  bool m_dump_tensors = false;
-  int m_exit_count = 5;
+
 #endif // LBANN_HAS_DISTCONV
   
 

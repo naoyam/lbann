@@ -132,8 +132,13 @@ class relu_layer : public entrywise_activation_layer {
   #else
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled) {
+      early_terminate();
       fp_compute_distconv();
-      return;
+      if (m_exit_count == 0) {
+        dump_tensor(m_activations_t, get_name() + "_activations.txt");
+      } else {
+        return;
+      }
     }
 #endif
     const DataType one = 1;
@@ -146,7 +151,13 @@ class relu_layer : public entrywise_activation_layer {
                                        &zero,
                                        this->m_activations_cudnn_desc,
                                        get_activations().Buffer()));
-
+#ifdef LBANN_HAS_DISTCONV
+    if (m_distconv_enabled && m_exit_count == 0) {
+      assert0(dc::tensor::View(
+          m_activations_copyout, m_activations_d[0].get_data(0)));
+      dump_tensor(m_activations_copyout,
+                  get_name() + "_activations_original.txt");
+    }
 #endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
@@ -159,7 +170,12 @@ class relu_layer : public entrywise_activation_layer {
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled) {
       bp_compute_distconv();
-      return;
+      if (m_exit_count == 0) {
+        dump_tensor(m_error_signals_t,
+                    get_name() + "_error_signals.txt");
+      } else {
+        return;
+      }
     }
 #endif
     const DataType one = 1;
@@ -175,13 +191,27 @@ class relu_layer : public entrywise_activation_layer {
                                         &one,
                                         this->m_error_signals_cudnn_desc,
                                         get_error_signals().Buffer()));
-
+#ifdef LBANN_HAS_DISTCONV
+    if (m_distconv_enabled && m_exit_count == 0) {
+      assert0(dc::tensor::View(m_error_signals_copyout,
+                               m_error_signals_d[0].get_data(0)));      
+      dump_tensor(m_error_signals_copyout,
+                  get_name() + "_error_signals_original.txt");
+    }
+#endif
   #endif // LBANN_HAS_CUDNN
   }
 
 #ifdef LBANN_HAS_DISTCONV
  public:
   bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -218,6 +248,9 @@ class relu_layer : public entrywise_activation_layer {
   void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {   
     Layer::setup_tensors_fwd(dists);    
     if (!m_distconv_enabled) return;
+
+    // DEBUG
+    m_dump_tensors = true;
     
     // REFACTORING: duplicated at convolution::setup_tensors
     const Array4 input_tensor_shape =
@@ -260,10 +293,8 @@ class relu_layer : public entrywise_activation_layer {
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
     
-    if (m_child_copy_required) {
-      m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
-                                        output_local_shape, sample_block_size);
-    }
+    m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
+                                      output_local_shape, sample_block_size);
   }
 
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
@@ -293,7 +324,7 @@ class relu_layer : public entrywise_activation_layer {
                                                        sample_dist,
                                                        output_local_shape,
                                                        sample_block_size);
-      m_prev_error_signals_t = TensorDev(output_local_shape, loc,
+      m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
                                          spatial_local_size,
                                          m_output_decomposition_block);
@@ -314,10 +345,8 @@ class relu_layer : public entrywise_activation_layer {
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();
 
-    if (m_parent_copy_required) {
-      m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
-                                          input_local_shape, sample_block_size);
-    }
+    m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
+                                        input_local_shape, sample_block_size);
 
     // Init the dc::Pooling layer
     m_relu = new dc::ReLU<dc::cudnn::BackendCUDNN>(
@@ -328,14 +357,14 @@ class relu_layer : public entrywise_activation_layer {
   }
   
   void fp_compute_distconv() {
-    MPIPrintStreamDebug() << get_name() << ": Forward computation\n";
-    
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";    
+    assert_always(m_distconv_enabled);
     // Useful constants
     const DataType one = 1;
     const DataType zero = 0;
     m_relu->set_num_samples(this->m_model->get_current_mini_batch_size());        
     if (m_parent_copy_required) {
-      MPIPrintStreamDebug() << "Copying to spatial decomposition\n";      
+      MPIPrintStreamDebug() << "Copying from sample decomposition\n";
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
@@ -347,6 +376,7 @@ class relu_layer : public entrywise_activation_layer {
     m_relu->forward(one, m_prev_activations_t,
                     zero, m_activations_t);
     if (m_child_copy_required) {
+      MPIPrintStreamDebug() << "Copying back to sample decomposition\n";      
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
       assert0(dc::tensor::Copy(m_activations_copyout, m_activations_t));
@@ -354,12 +384,18 @@ class relu_layer : public entrywise_activation_layer {
   }
 
   void bp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";    
+    assert_always(m_distconv_enabled);
     const DataType one = 1;
     if (m_child_copy_required) {
+      MPIPrintStreamDebug() << "Copying from sample decomposition\n";            
       assert0(dc::tensor::View(
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
       assert0(dc::tensor::Copy(m_prev_error_signals_t, m_prev_error_signals_const_view));
+    } else {
+      MPIPrintStreamDebug()
+          << "Directly reading activations of previous layer\n";
     }
 #ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS
     m_error_signals_t.zero();
@@ -370,8 +406,11 @@ class relu_layer : public entrywise_activation_layer {
                      m_prev_activations_t, DataType(0), m_error_signals_t);
 #endif
     if (m_parent_copy_required) {
-      assert0(dc::tensor::View(m_error_signals_copyout, m_error_signals_d[0].get_data(0)));      
-      assert0(dc::tensor::Copy(m_error_signals_copyout, m_error_signals_t));
+      if (m_exit_count != 0) {
+        MPIPrintStreamDebug() << "Copying back to sample decomposition\n";            
+        assert0(dc::tensor::View(m_error_signals_copyout, m_error_signals_d[0].get_data(0)));      
+        assert0(dc::tensor::Copy(m_error_signals_copyout, m_error_signals_t));
+      }
     }
   }
   

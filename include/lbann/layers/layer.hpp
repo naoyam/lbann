@@ -581,11 +581,41 @@ class Layer {
   virtual const TensorDev &get_error_signals_t() const;  
   //virtual ConstTensorDev get_activations_const_view() const;
   //virtual ConstTensorDev get_prev_activations_const_view() const;
+
+  void disable_distconv() {
+    m_distconv_enabled = false;
+  }
   
  protected:
 
   virtual Array4 get_strides() const;
 
+  bool m_dump_tensors = false;
+  template <typename Tensor>
+  void dump_tensor(const Tensor &t, const std::string &path) {
+    if (getenv("DISTCONV_DUMP")) {
+      if (m_exit_count == 0) {
+        MPIPrintStreamDebug() << "Dumping tensor to " << path << "\n";
+        m_cudnn->synchronize_all();
+        dc::dump_tensor(t, path, true);
+      }
+    }
+  }
+
+  int m_exit_count = 10;
+  void early_terminate() {
+    if (getenv("DISTCONV_EARLY_TERMINATE")) {
+      --m_exit_count;
+      if (m_exit_count < 0) {
+        MPIPrintStreamDebug() << "Early terminate\n";
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Finalize();
+        cudaDeviceReset();
+        exit(0);
+      }
+    }
+  }
+  
   bool m_distconv_enabled = false;
   bool m_parent_copy_required = true;
   bool m_child_copy_required = true;

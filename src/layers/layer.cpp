@@ -1233,6 +1233,8 @@ void Layer::setup_tensor_distribution_add_adjacent_invariants(
 void Layer::setup_tensor_distribution_block() {
   m_input_decomposition_block = Array4(1);  
   m_output_decomposition_block = Array4(1);
+  // Disable as we don't need to enforce divisible boundaries
+#if 0
   if (using_distconv()) {
     const auto *child = get_child_layers()[0];
     if (child->using_distconv()) {
@@ -1242,6 +1244,7 @@ void Layer::setup_tensor_distribution_block() {
     m_input_decomposition_block =
         m_output_decomposition_block * get_strides();
   }
+#endif
 }
 
 void Layer::setup_tensors_fwd(const std::array<Dist, 4> &dists) {

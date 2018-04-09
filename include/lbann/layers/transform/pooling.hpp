@@ -34,7 +34,10 @@
 #include "lbann/utils/exception.hpp"
 #include "lbann/utils/im2col.hpp"
 #include "lbann_config.hpp"
+
+#ifdef LBANN_HAS_DISTCONV
 #include "lbann/distconv.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 namespace lbann {
 
@@ -220,7 +223,19 @@ class pooling_layer : public transform_layer {
     cudnnPoolingMode_t cudnn_pool_mode;
     switch(m_pool_mode) {
     case pool_mode::max:
+#ifndef LBANN_HAS_DISTCONV
       cudnn_pool_mode = CUDNN_POOLING_MAX; break;
+#else
+      // This does not seem to be necessary. It's not clear what the
+      // difference of the two algorithms is.
+      if (getenv("DISTCONV_DETERMINISTIC")) {
+        //cudnn_pool_mode = CUDNN_POOLING_MAX_DETERMINISTIC;
+        cudnn_pool_mode = CUDNN_POOLING_MAX;
+      } else {
+        cudnn_pool_mode = CUDNN_POOLING_MAX;
+      }
+      break;
+#endif
     case pool_mode::average:
       cudnn_pool_mode = CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING; break;
     case pool_mode::average_no_pad:
@@ -246,7 +261,21 @@ class pooling_layer : public transform_layer {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
+        early_terminate();
         fp_compute_distconv();
+        if (m_exit_count == 0) {
+#if 1
+          dump_tensor(m_activations_t,
+                      get_name() + "_activations.txt");
+#endif
+          fp_compute_cudnn();
+          assert0(dc::tensor::View(
+              m_activations_copyout, m_activations_d[0].get_data(0)));
+#if 1
+          dump_tensor(m_activations_copyout,
+                      get_name() + "_activations_original.txt");
+#endif
+        }
       } else {
         fp_compute_cudnn();
       }
@@ -262,7 +291,15 @@ class pooling_layer : public transform_layer {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        bp_compute_distconv();        
+        bp_compute_distconv();
+        if (m_exit_count == 0) {
+          dump_tensor(m_error_signals_t, get_name() + "_error_signals.txt");        
+          bp_compute_cudnn();
+          assert0(dc::tensor::View(
+              m_error_signals_copyout,
+              m_error_signals_d[0].get_data(0)));
+          dump_tensor(m_error_signals_copyout, get_name() + "_error_signals_original.txt");
+        }
       } else {
         bp_compute_cudnn();        
       }
@@ -518,8 +555,7 @@ class pooling_layer : public transform_layer {
 #ifndef LBANN_HAS_DISTCONV
     throw lbann_exception("pooling_layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << "Forward pooling\n";
-
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
     if (m_parent_copy_required) {
@@ -550,7 +586,6 @@ class pooling_layer : public transform_layer {
     throw lbann_exception("pooling_layer: DISTCONV not detected");
 #else
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
-
     assert_always(m_distconv_enabled);
 
     if (m_child_copy_required) {
@@ -568,11 +603,13 @@ class pooling_layer : public transform_layer {
     m_pooling->backward(DataType(1.0), m_activations_t, m_prev_error_signals_t,
                         m_prev_activations_t, DataType(0.0), m_error_signals_t);
 #endif
-    
+
     if (m_parent_copy_required) {
       assert0(dc::tensor::View(m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-      assert0(dc::tensor::Copy(
-          m_error_signals_copyout, m_error_signals_t));
+      if (m_exit_count != 0) {
+        assert0(dc::tensor::Copy(
+            m_error_signals_copyout, m_error_signals_t));
+      }
     }
 #endif    
   }  
@@ -580,9 +617,13 @@ class pooling_layer : public transform_layer {
 #ifdef LBANN_HAS_DISTCONV
  public:
   bool using_distconv() const override {
-    if (!(m_pads[0] == 0 && m_pads[1] == 0 &&
-          m_pool_dims[0] % 2 != 0 && m_pool_dims[1] % 2 != 0)) {
-      MPIPrintStreamDebug() << "pooling: unsupported \n";
+    if (!(m_pads[0] == 0 && m_pads[1] == 0)) {
+      MPIPrintStreamDebug() << "pooling: unsupported due to padding\n";
+      return false;
+    }
+    
+    if (!(m_pool_dims[0] % 2 != 0 && m_pool_dims[1] % 2 != 0)) {
+      MPIPrintStreamDebug() << "pooling: unsupported due to window shape\n";
       return false;
     }
     
@@ -592,10 +633,10 @@ class pooling_layer : public transform_layer {
     if (!((m_strides[0] == 1 && m_strides[1] == 1) ||
          (m_strides[0] == stencil_h + 1 &&
           m_strides[1] == stencil_w + 1))) {
-      MPIPrintStreamDebug() << "pooling: unsupported \n";
+      MPIPrintStreamDebug() << "pooling: unsupported due to strides\n";
       return false;
     }
-
+#if 0
     int input_tensor_w = m_prev_neuron_dims[2];
     int input_tensor_h = m_prev_neuron_dims[1];
 
@@ -607,6 +648,16 @@ class pooling_layer : public transform_layer {
                             << "\n";
       return false;
     }
+#endif
+    
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -621,13 +672,21 @@ class pooling_layer : public transform_layer {
       int stencil_h = (m_pool_dims[0] - 1) / 2;
       int stencil_w = (m_pool_dims[1] - 1) / 2;
       Array4 overlap({stencil_w, stencil_h, 0, 0});
-      auto &prev_activations_dist = dists[this][0];      
+      auto &prev_activations_dist = dists[this][0];
+      auto &activations_dist = dists[this][1];
+      auto &error_signals_dist = dists[this][2];            
+      auto &prev_error_signals_dist = dists[this][3];
       prev_activations_dist.set_overlap(overlap);
       updated.insert(&prev_activations_dist);
       fixed.insert(&prev_activations_dist);
-      // error_signals needs to have the same size of halo if
-      // activation has due to a constraint of cuDNN
-      auto &error_signals_dist = dists[this][2];      
+      // cudnnPoolingBackward requires activations and
+      // prev_error_signals must have the same stride
+      invariants[&activations_dist].insert(
+          &prev_error_signals_dist);
+      invariants[&prev_error_signals_dist].insert(
+          &activations_dist);
+      // cudnnPoolingBackward requires prev_activations and
+      // error_signals must have the same stride
       invariants[&error_signals_dist].insert(
           &prev_activations_dist);
       invariants[&prev_activations_dist].insert(
@@ -718,14 +777,14 @@ class pooling_layer : public transform_layer {
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
     
-    if (m_child_copy_required) {
-      m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
+    //if (m_child_copy_required) {
+    m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                         output_local_shape, sample_block_size);
-    }
   }
 
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
     Layer::setup_tensors_bwd(dists);
+    if (!m_distconv_enabled) return;    
     const Array4 input_tensor_shape =
         {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
          m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
@@ -748,7 +807,7 @@ class pooling_layer : public transform_layer {
                                                        sample_dist,
                                                        output_local_shape,
                                                        sample_block_size);
-      m_prev_error_signals_t = TensorDev(output_local_shape, loc,
+      m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
                                          spatial_local_size,
                                          m_output_decomposition_block);
@@ -770,10 +829,9 @@ class pooling_layer : public transform_layer {
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();
 
-    if (m_parent_copy_required) {
-      m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
+    //if (m_parent_copy_required) {
+    m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
                                            input_local_shape, sample_block_size);
-    }
 
     // Init the dc::Pooling layer
     m_pooling = new dc::Pooling<dc::cudnn::BackendCUDNN>(
@@ -791,17 +849,8 @@ class pooling_layer : public transform_layer {
       throw lbann_exception("pooling_layer: no DISTCONV implementation for pooling mode");
     }
     
-    m_pooling->setup(m_prev_activations_t,
-                     m_activations_t,
-                     m_error_signals_t,
-                     m_prev_error_signals_t,
-                     m_pool_dims[0], m_pool_dims[1],
-                     m_pads[0], m_pads[1],
-                     m_strides[0], m_strides[1],
-                     mode);
-
     MPIPrintStreamDebug()
-        << "Pooling. "
+        << "Pooling (" << get_name() << "): "
         << "prev_activations_const_view: " << m_prev_activations_const_view
         << ", prev_activations_t: " << m_prev_activations_t
         << ", activations_copyout: " << m_activations_copyout
@@ -811,7 +860,16 @@ class pooling_layer : public transform_layer {
         << ", error_signals_copyout: " << m_error_signals_copyout
         << ", error_signals_t: " << m_error_signals_t
         << "\n";
-  }    
+    m_pooling->setup(m_prev_activations_t,
+                     m_activations_t,
+                     m_error_signals_t,
+                     m_prev_error_signals_t,
+                     m_pool_dims[0], m_pool_dims[1],
+                     m_pads[0], m_pads[1],
+                     m_strides[0], m_strides[1],
+                     mode);
+
+  }
 
  protected:
   dc::Pooling<dc::cudnn::BackendCUDNN> *m_pooling;
