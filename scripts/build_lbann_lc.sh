@@ -69,7 +69,6 @@ INSTRUMENT=
 WITH_ALUMINUM=OFF
 WITH_CONDUIT=OFF
 WITH_DISTCONV=OFF
-DISTCONV_DIR=$HOME/wsa/distconv/src/install
 WITH_TBINF=OFF
 RECONFIGURE=0
 # In case that autoconf fails during on-demand buid on surface, try the newer
@@ -639,6 +638,11 @@ else
 	OPENBLAS_ARCH=
 fi
 	
+################################################################
+# Temporary Distconv stuff
+################################################################
+DISTCONV_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE
+
 ################################################################
 # Display parameters
 ################################################################
