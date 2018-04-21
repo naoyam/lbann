@@ -754,6 +754,8 @@ class pooling_layer : public transform_layer {
          m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
     Array4 output_local_shape = output_tensor_shape;
     output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+    const int filter_dims[2] = {m_pool_dims[1], m_pool_dims[0]};
+    const int strides[2] = {m_strides[1], m_strides[0]};
 
     if (m_parent_copy_required) {
       m_prev_activations_const_view = ConstTensorDev(input_tensor_shape, loc,
@@ -771,8 +773,13 @@ class pooling_layer : public transform_layer {
                     == m_input_decomposition_block);
     }
 
+    const Array4 output_spatial_local_shape =
+        dc::get_output_local_tensor_shape(m_prev_activations_t,
+                                          filter_dims, strides);
+    MPIPrintStreamDebug()
+        << "output_spatial_local_shape: " << output_spatial_local_shape << "\n";
     m_activations_t = TensorDev(output_tensor_shape,
-                                loc, dists[1], spatial_local_size,
+                                loc, dists[1], output_spatial_local_shape,
                                 m_output_decomposition_block);
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
@@ -809,7 +816,7 @@ class pooling_layer : public transform_layer {
                                                        sample_block_size);
       m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
-                                         spatial_local_size,
+                                         m_activations_t.get_local_shape(),
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
@@ -855,8 +862,8 @@ class pooling_layer : public transform_layer {
         << ", prev_activations_t: " << m_prev_activations_t
         << ", activations_copyout: " << m_activations_copyout
         << ", activations_t: " << m_activations_t
-        << ", prev_error_signals_const_view: " << m_prev_activations_const_view
-        << ", prev_error_signals_t: " << m_prev_activations_t
+        << ", prev_error_signals_const_view: " << m_prev_error_signals_const_view
+        << ", prev_error_signals_t: " << m_prev_error_signals_t
         << ", error_signals_copyout: " << m_error_signals_copyout
         << ", error_signals_t: " << m_error_signals_t
         << "\n";

@@ -641,7 +641,7 @@ fi
 ################################################################
 # Temporary Distconv stuff
 ################################################################
-DISTCONV_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE
+DISTCONV_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE/distconv
 
 ################################################################
 # Display parameters
@@ -741,6 +741,7 @@ ${CMAKE_PATH}/cmake \
 -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
 -D CMAKE_INSTALL_MESSAGE=${CMAKE_INSTALL_MESSAGE} \
 -D CMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
+-D CMAKE_CUDA_FLAGS_DEBUG="-G" \
 -D LBANN_SB_BUILD_CNPY=ON \
 -D LBANN_SB_BUILD_HYDROGEN=ON \
 -D LBANN_SB_FWD_HYDROGEN_Hydrogen_ENABLE_CUDA=${WITH_CUDA} \
