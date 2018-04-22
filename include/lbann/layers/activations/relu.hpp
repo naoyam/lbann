@@ -288,7 +288,7 @@ class relu_layer : public entrywise_activation_layer {
     }
 
     m_activations_t = TensorDev(output_tensor_shape,
-                                loc, dists[1], spatial_local_size,
+                                loc, dists[1], m_prev_activations_t.get_local_shape(),
                                 m_output_decomposition_block);
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
@@ -340,7 +340,7 @@ class relu_layer : public entrywise_activation_layer {
 
     // error_signals
     m_error_signals_t = TensorDev(input_tensor_shape, loc,
-                                  dists[2], spatial_local_size,
+                                  dists[2], m_prev_error_signals_t.get_local_shape(),
                                   m_input_decomposition_block);
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();

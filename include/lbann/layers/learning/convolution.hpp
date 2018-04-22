@@ -523,6 +523,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
       prev_error_signals_dist.set_overlap(overlap);
       updated.insert(&prev_error_signals_dist);
       fixed.insert(&prev_error_signals_dist);
+      // To deal with strides, error signals must have the same size
+      // of overlap 
+      auto &error_signals_dist = dists[this][2];
+      error_signals_dist.set_overlap(overlap);
+      updated.insert(&error_signals_dist);
+      fixed.insert(&error_signals_dist);
     }
   }
 
@@ -554,6 +560,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
          m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
     Array4 output_local_shape = output_tensor_shape;
     output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+    const int filter_dims[2] = {m_kernel_dims[3], m_kernel_dims[2]};
+    const int strides[2] = {m_strides[1], m_strides[0]};
     
     if (m_parent_copy_required) {
       MPIPrintStreamDebug() << "copying prev activations required\n";      
@@ -574,8 +582,13 @@ class convolution_layer : public base_convolution_layer<Dev> {
                     == m_input_decomposition_block);
     }
 
+    const Array4 output_spatial_local_shape =
+        dc::get_output_local_tensor_shape(m_prev_activations_t,
+                                          filter_dims, strides, true);
+    MPIPrintStreamDebug()
+        << "Convolution output_spatial_local_shape: " << output_spatial_local_shape << "\n";
     m_activations_t = TensorDev(output_tensor_shape,
-                                loc, dists[1], spatial_local_size,
+                                loc, dists[1], output_spatial_local_shape,
                                 m_output_decomposition_block);
     assert0(m_activations_t.allocate());
     m_activations_t.zero();
@@ -635,7 +648,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     Array4 input_local_shape = input_tensor_shape;
     // Assuming single GPU per rank
     input_local_shape[3] = m_max_mini_batch_size_per_gpu;
-    const Array4 spatial_local_size = {0, 0, 0, 0};
+    //const Array4 spatial_local_size = {0, 0, 0, 0};
     const Array4 output_tensor_shape =
         {m_neuron_dims[2], m_neuron_dims[1],
          m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
@@ -650,7 +663,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
                                                        sample_block_size);
       m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
-                                         spatial_local_size,
+                                         m_activations_t.get_local_shape(),
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
@@ -665,7 +678,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     
     // error_signals
     m_error_signals_t = TensorDev(input_tensor_shape, loc,
-                                  dists[2], spatial_local_size,
+                                  dists[2], m_prev_activations_t.get_local_shape(),
                                   m_input_decomposition_block);
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();

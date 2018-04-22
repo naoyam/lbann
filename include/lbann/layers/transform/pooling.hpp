@@ -775,7 +775,7 @@ class pooling_layer : public transform_layer {
 
     const Array4 output_spatial_local_shape =
         dc::get_output_local_tensor_shape(m_prev_activations_t,
-                                          filter_dims, strides);
+                                          filter_dims, strides, false);
     MPIPrintStreamDebug()
         << "output_spatial_local_shape: " << output_spatial_local_shape << "\n";
     m_activations_t = TensorDev(output_tensor_shape,
@@ -801,7 +801,6 @@ class pooling_layer : public transform_layer {
     Array4 input_local_shape = input_tensor_shape;
     // Assuming single GPU per rank
     input_local_shape[3] = m_max_mini_batch_size_per_gpu;
-    const Array4 spatial_local_size = {0, 0, 0, 0};
     const Array4 output_tensor_shape =
         {m_neuron_dims[2], m_neuron_dims[1],
          m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
@@ -830,8 +829,8 @@ class pooling_layer : public transform_layer {
     }
 
     // error_signals
-    m_error_signals_t = TensorDev(input_tensor_shape, loc,
-                                  dists[2], spatial_local_size,
+    m_error_signals_t = TensorDev(input_tensor_shape, loc, dists[2],
+                                  m_prev_activations_t.get_local_shape(),                                  
                                   m_input_decomposition_block);
     assert0(m_error_signals_t.allocate());
     m_error_signals_t.zero();
