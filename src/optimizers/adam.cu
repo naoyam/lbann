@@ -76,7 +76,6 @@ void adam::step_compute_gpu(AbsDistMat& values, const AbsDistMat& gradient) {
   const int size = local_height * local_width;
   if (size <= 0) { return; }
 
-  std::cerr << "adam num_entries: " << num_entries << "\n";
   // Launch CUDA kernels
   const int block_size = 256;
   dim3 block_dims, grid_dims;
