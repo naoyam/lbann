@@ -318,8 +318,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
     MPIPrintStreamDebug() << "Applying bias\n";
     
     assert0(dc::tensor::View(
-        m_bias_e, m_weights[1]->get_values_gpu()[0]));
-    m_conv->apply_bias(m_bias_scaling_factor, m_bias_e,
+        m_bias_t, m_weights[1]->get_values_gpu()[0]));
+    m_conv->apply_bias(m_bias_scaling_factor, m_bias_t,
                        DataType(1), m_activations_t);
 #endif
   }
@@ -411,10 +411,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
             m_prev_error_signals_t, m_prev_error_signals_const_view));
         m_prev_error_signals_redistributed = true;
       }
-      assert0(dc::tensor::View(m_bias_gradient_e,
+      assert0(dc::tensor::View(m_bias_gradient_t,
                                m_bias_gradient_d.get_data(0)));
       m_conv->backward_bias(DataType(1.0), m_prev_error_signals_t,
-                            DataType(0.0), m_bias_gradient_e, false);
+                            DataType(0.0), m_bias_gradient_t, false);
       const DataType bias_scale = m_bias_scaling_factor / effective_mini_batch_size;
       if (m_exit_count != 0) {
         bias_optimizer->add_to_gradient_staging(m_bias_gradient_d,
@@ -618,19 +618,19 @@ class convolution_layer : public base_convolution_layer<Dev> {
         << "\n";
     if (m_bias_scaling_factor != DataType(0)) {
       Array4 bias_shape = {1, 1, m_neuron_dims[0], 1};
-      m_bias_e = TensorDev(bias_shape, loc, Dist());
-      assert0(dc::tensor::View(m_bias_e, m_weights[1]->get_values_gpu()[0]));
+      m_bias_t = TensorDev(bias_shape, loc, Dist());
+      assert0(dc::tensor::View(m_bias_t, m_weights[1]->get_values_gpu()[0]));
       MPIPrintStreamDebug()
-          << "Bias tensor: " << m_bias_e << "\n";
-      m_conv->setup_bias(m_bias_e);
+          << "Bias tensor: " << m_bias_t << "\n";
+      m_conv->setup_bias(m_bias_t);
 
       // Bias backprop
       optimizer* bias_optimizer = m_weights[1]->get_optimizer();      
       if (bias_optimizer != nullptr) {
-        m_bias_gradient_e = TensorDev(bias_shape, loc, Dist());
-        assert0(dc::tensor::View(m_bias_gradient_e,
+        m_bias_gradient_t = TensorDev(bias_shape, loc, Dist());
+        assert0(dc::tensor::View(m_bias_gradient_t,
                                  m_bias_gradient_d.get_data(0)));
-        m_conv->setup_bias_gradient(m_bias_gradient_e);
+        m_conv->setup_bias_gradient(m_bias_gradient_t);
       }
     }
   }
@@ -711,8 +711,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
   TensorDev m_kernel_t;
   TensorDev m_kernel_gradient_e;
   // Bias
-  TensorDev m_bias_e;
-  TensorDev m_bias_gradient_e;
+  TensorDev m_bias_t;
+  TensorDev m_bias_gradient_t;
   // Algorithms
   std::string m_fwd_algo = "DEFAULT";
   std::string m_bwd_data_algo = "DEFAULT";
