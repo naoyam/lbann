@@ -602,7 +602,7 @@ class Layer {
     }
   }
 
-  int m_exit_count = 10;
+  int m_exit_count = 5;
   void early_terminate() {
     if (getenv("DISTCONV_EARLY_TERMINATE")) {
       --m_exit_count;

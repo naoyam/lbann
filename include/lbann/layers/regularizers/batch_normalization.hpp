@@ -27,10 +27,15 @@
 #ifndef LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED
 #define LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED
 
+#include "lbann_config.hpp"
 #include "lbann/layers/regularizers/regularizer.hpp"
 #ifdef LBANN_HAS_CUDNN
 #include "lbann/layers/regularizers/batch_normalization_cuda.hpp"
 #endif // LBANN_HAS_CUDNN
+
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/distconv.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 namespace lbann {
 
@@ -259,6 +264,20 @@ class batch_normalization : public regularizer_layer {
 
   void fp_compute() override {
     if (this->using_gpus()) {
+#ifdef LBANN_HAS_DISTCONV
+      if (m_distconv_enabled) {
+        early_terminate();
+        fp_compute_distconv();
+        if (m_exit_count == 0) {
+          dump_tensor(m_activations_t,
+                      get_name() + "_activations");
+          fp_compute_gpu();
+          dump_tensor(m_activations_copyout,
+                      get_name() + "_activations_original");
+        }
+        return;
+      }
+#endif
       fp_compute_gpu();
     } else {
       fp_compute_cpu();
@@ -267,6 +286,28 @@ class batch_normalization : public regularizer_layer {
 
   void bp_compute() override {
     if (this->using_gpus()) {
+#ifdef LBANN_HAS_DISTCONV
+      if (m_distconv_enabled) {
+        bp_compute_distconv();
+        if (m_exit_count == 0) {
+          dump_tensor(m_error_signals_t,
+                      get_name() + "_error_signals");
+          dump_tensor(m_prev_activations_t,
+                      get_name() + "_prev_activations");
+          dump_tensor(m_prev_activations_const_view,
+                      get_name() + "_prev_activations_original");
+          dump_tensor(m_prev_error_signals_t,
+                      get_name() + "_prev_error_signals");
+          dump_tensor(m_prev_error_signals_const_view,
+                      get_name() + "_prev_error_signals_original");
+          m_error_signals_copyout.zero();
+          bp_compute_gpu();
+          dump_tensor(m_error_signals_copyout,
+                      get_name() + "_error_signals_original");
+        }
+        return;
+      }
+#endif
       bp_compute_gpu();
     } else {
       bp_compute_cpu();
@@ -285,7 +326,7 @@ class batch_normalization : public regularizer_layer {
     const auto& input = get_prev_activations();
     const int height = input.Height();
     const int width = input.Width();
-    const int local_width = input.LocalWidth();
+    const int local_width = input.LocalWidth();    
     const int num_channels = this->m_neuron_dims[0];
     const int channel_size = this->m_num_neurons / num_channels;
 
@@ -364,6 +405,8 @@ class batch_normalization : public regularizer_layer {
   #ifndef LBANN_HAS_CUDNN
     throw lbann_exception("batch_normalization_layer: cuDNN not detected");
   #else
+    
+    const int num_channels = this->m_neuron_dims[0];
 
     // Check execution mode
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
@@ -383,7 +426,7 @@ class batch_normalization : public regularizer_layer {
     const int height = input.Height();
     const int width = input.Width();
     const int local_width = input.LocalWidth();
-    const int num_channels = this->m_neuron_dims[0];
+
 
     // Compute local gradient contributions
     batch_normalization_cuda
@@ -418,6 +461,7 @@ class batch_normalization : public regularizer_layer {
       Zero(*m_mean_gradient);
       Zero(*m_var_gradient);
     }
+
     optimizer* scale_optimizer = m_weights[0]->get_optimizer();
     if (scale_optimizer != nullptr) {
       scale_optimizer->add_to_gradient_staging(
@@ -715,6 +759,383 @@ class batch_normalization : public regularizer_layer {
     m_scale_gradient = nullptr;
     m_bias_gradient = nullptr;
   }
+
+#ifdef LBANN_HAS_DISTCONV
+ public:
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void fp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
+    assert_always(m_distconv_enabled);
+
+    m_bn->set_num_samples(this->m_model->get_current_mini_batch_size());
+    assert_always(this->m_model->get_current_mini_batch_size() ==
+                  get_prev_activations().Width());
+    
+    if (m_parent_copy_required) {
+      assert0(dc::tensor::View(
+          m_prev_activations_const_view,
+          m_prev_activations_d[0].get_locked_data(0)));
+      assert0(dc::tensor::Copy(
+          m_prev_activations_t, m_prev_activations_const_view));
+    }
+
+    assert0(dc::tensor::View(
+        m_scale_t, m_weights[0]->get_values_gpu()[0]));
+    assert0(dc::tensor::View(
+        m_bias_t, m_weights[1]->get_values_gpu()[0]));
+    assert0(dc::tensor::View(
+        m_running_mean_t, m_weights[2]->get_values_gpu()[0]));
+    assert0(dc::tensor::View(
+        m_running_var_t, m_weights[3]->get_values_gpu()[0]));
+
+    m_bn->forward(m_prev_activations_t,
+                  m_mean_t,
+                  m_var_t,
+                  m_running_mean_t,
+                  m_running_var_t,
+                  m_scale_t,
+                  m_bias_t,
+                  m_activations_t);
+
+    if (m_child_copy_required) {
+      assert0(dc::tensor::View(
+          m_activations_copyout, m_activations_d[0].get_data(0)));
+      assert0(dc::tensor::Copy(
+          m_activations_copyout, m_activations_t));
+    }
+  }
+  
+  void bp_compute_distconv() {
+    MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
+    assert_always(m_distconv_enabled);
+
+    // Check execution mode
+    const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
+    const int num_channels = this->m_neuron_dims[0];
+    
+    if (m_child_copy_required) {
+      assert0(dc::tensor::View(
+          m_prev_error_signals_const_view,
+          m_prev_error_signals_d[0].get_locked_data(0)));
+      assert0(dc::tensor::Copy(
+          m_prev_error_signals_t, m_prev_error_signals_const_view));
+    }
+
+    assert0(dc::tensor::View(
+        m_scale_t, m_weights[0]->get_values_gpu()[0]));
+
+    assert0(dc::tensor::View(
+        m_mean_gradient_t, m_mean_gradient_d.get_data()[0]));
+
+    m_bn->backward_stage1(m_prev_activations_t,
+                          m_prev_error_signals_t,
+                          m_mean_t, m_var_t, m_scale_t,
+                          m_scale_gradient_t, m_bias_gradient_t,
+                          m_mean_gradient_t, m_var_gradient_t,
+                          false);
+    
+    assert_always(is_training && m_use_global_stats);
+    
+    // Verbatim copy from bp_compute_gpu
+    // Accumulate gradients
+    if (is_training) {
+      if (m_use_global_stats) {
+        this->m_cudnn->global_allreduce_on_gpus(m_mean_gradient_d.get_data(),
+                                                num_channels,
+                                                1,
+                                                m_mean_gradient->RedundantComm());
+        this->m_cudnn->global_allreduce_on_gpus(m_var_gradient_d.get_data(),
+                                                num_channels,
+                                                1,
+                                                m_var_gradient->RedundantComm());
+      } else {
+        this->m_cudnn->allreduce_on_gpus(m_mean_gradient_d.get_data(),
+                                         num_channels,
+                                         1);
+        this->m_cudnn->allreduce_on_gpus(m_var_gradient_d.get_data(),
+                                         num_channels,
+                                         1);
+      }
+    } else {
+      m_mean_gradient_d.zero();
+      m_var_gradient_d.zero();
+    }
+
+    const int effective_mini_batch_size = this->m_model->get_effective_mini_batch_size();
+    
+    optimizer* scale_optimizer = m_weights[0]->get_optimizer();
+    if (scale_optimizer != nullptr) {
+      scale_optimizer->add_to_gradient_staging(
+        m_scale_gradient_d,
+        DataType(1) / effective_mini_batch_size);
+    }
+    optimizer* bias_optimizer = m_weights[1]->get_optimizer();
+    if (bias_optimizer != nullptr) {
+      bias_optimizer->add_to_gradient_staging(
+        m_bias_gradient_d,
+        DataType(1) / effective_mini_batch_size);
+    }
+
+    if (m_exit_count == 0) {
+      if (m_prev_activations_t.get_locale().get_rank() == 0) {
+        DataType *h = (DataType*)malloc(sizeof(DataType) * num_channels);
+        cudaMemcpy(h, m_mean_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+        std::ofstream out;
+        out.open("m_mean_gradient.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+
+        cudaMemcpy(h, m_var_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+
+        out.open("m_var_gradient.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+        cudaMemcpy(h, m_scale_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+
+        out.open("m_scale_gradient.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+        cudaMemcpy(h, m_bias_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+
+        out.open("m_bias_gradient.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+
+        
+        assert0(dc::tensor::View(
+            m_mean_t, m_mean_d.get_data()[0]));
+        cudaMemcpy(h, m_mean_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+        out.open("m_mean.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+
+        cudaMemcpy(h, m_var_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+        out.open("m_var.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+        cudaMemcpy(h, m_scale_t.get_buffer(), sizeof(DataType) * num_channels,
+                   cudaMemcpyDeviceToHost);
+        out.open("m_scale.txt", std::ios::out | std::ios::trunc);
+        for (int i = 0; i < num_channels; ++i) {
+          out << h[i] << std::endl;
+        }
+        out.close();
+      }
+    }
+
+    // back to distconv
+    m_bn->backward_stage2(m_prev_activations_t,
+                          m_prev_error_signals_t,
+                          m_mean_t, m_var_t, m_scale_t,
+                          m_mean_gradient_t, m_var_gradient_t,
+                          m_error_signals_t);
+
+    if (m_parent_copy_required) {
+      assert0(dc::tensor::View(
+          m_error_signals_copyout,
+          m_error_signals_d[0].get_data(0)));
+      assert0(dc::tensor::Copy(
+          m_error_signals_copyout, m_error_signals_t));
+    }
+  }
+    
+ protected:
+  dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType> *m_bn;
+  TensorDev m_mean_t;
+  TensorDev m_var_t;
+  TensorDev m_scale_t;
+  TensorDev m_bias_t;
+  TensorDev m_running_mean_t;
+  TensorDev m_running_var_t;
+  TensorDev m_mean_gradient_t;
+  TensorDev m_var_gradient_t;
+  TensorDev m_scale_gradient_t;
+  TensorDev m_bias_gradient_t;
+
+  void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {
+    Layer::setup_tensors_fwd(dists);
+    if (!m_distconv_enabled) return;    
+    
+    MPIPrintStreamDebug()
+        << "batch_normalization: setup_tensors."
+        << "\n";
+
+    MPIPrintStreamDebug()
+        << "epsilon: " << m_epsilon << "\n";
+    
+    const Array4 input_tensor_shape =
+        {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+         m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+    const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+    const Array4 sample_block_size = {1, 1, 1, 1};    
+    const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
+    Array4 input_local_shape = input_tensor_shape;
+    // Assuming single GPU per rank
+    input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+    const Array4 spatial_local_size = {0, 0, 0, 0};
+    const Array4 output_tensor_shape =
+        {m_neuron_dims[2], m_neuron_dims[1],
+         m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+    Array4 output_local_shape = output_tensor_shape;
+    output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+
+    if (m_parent_copy_required) {
+      m_prev_activations_const_view = ConstTensorDev(input_tensor_shape, loc,
+                                                     sample_dist,
+                                                     input_local_shape,
+                                                     sample_block_size);
+      m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
+                                       spatial_local_size, m_input_decomposition_block);
+      assert0(m_prev_activations_t.allocate());
+      m_prev_activations_t.zero();
+    } else {
+      m_prev_activations_t = get_parent_layers()[0]->get_activations_t();
+      assert_always(m_prev_activations_t.get_distribution() == dists[0]);
+      assert_always(m_prev_activations_t.get_requested_local_block()
+                    == m_input_decomposition_block);
+    }
+
+    m_activations_t = TensorDev(output_tensor_shape,
+                                loc, dists[1], m_prev_activations_t.get_local_shape(),
+                                m_output_decomposition_block);
+    assert0(m_activations_t.allocate());
+    m_activations_t.zero();
+    
+    //if (m_child_copy_required) {
+    m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
+                                      output_local_shape, sample_block_size);
+
+    const int num_channels = this->m_neuron_dims[0];
+    Array4 per_channel_stat_shape = {1, 1, num_channels, 1};
+    const auto shared_dist = Dist();
+    // mean
+    m_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_mean_t, m_mean_d.get_data()[0]));
+    // var
+    m_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_var_t, m_var_d.get_data()[0]));
+    // scale
+    m_scale_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_scale_t, m_weights[0]->get_values_gpu()[0]));
+    // bias
+    m_bias_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_bias_t, m_weights[1]->get_values_gpu()[0]));
+    // running_mean
+    m_running_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_running_mean_t, m_weights[2]->get_values_gpu()[0]));
+    // running_var
+    m_running_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_running_var_t, m_weights[3]->get_values_gpu()[0]));
+    // scale_gradient
+    m_scale_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_scale_gradient_t, m_scale_gradient_d.get_data()[0]));
+    // bias_gradient
+    m_bias_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_bias_gradient_t, m_bias_gradient_d.get_data()[0]));
+    // mean_gradient
+    m_mean_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_mean_gradient_t, m_mean_gradient_d.get_data()[0]));
+    // var_gradient
+    m_var_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
+    assert0(dc::tensor::View(
+        m_var_gradient_t, m_var_gradient_d.get_data()[0]));
+
+    // spatial decomposition requires global communication
+    m_use_global_stats = true;
+  }
+
+  void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
+    Layer::setup_tensors_bwd(dists);    
+    if (!m_distconv_enabled) return;
+    
+    // REFACTORING: duplicated at convolution::setup_tensors
+    const Array4 input_tensor_shape =
+        {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+         m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+    const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+    const Array4 sample_block_size = {1, 1, 1, 1};
+    const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});    
+    Array4 input_local_shape = input_tensor_shape;
+    // Assuming single GPU per rank
+    input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+    const Array4 output_tensor_shape =
+        {m_neuron_dims[2], m_neuron_dims[1],
+         m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+    Array4 output_local_shape = output_tensor_shape;
+    output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+
+    // prev_error_signals
+    if (m_child_copy_required) {
+      m_prev_error_signals_const_view = ConstTensorDev(output_tensor_shape, loc,
+                                                       sample_dist,
+                                                       output_local_shape,
+                                                       sample_block_size);
+      m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
+                                         dists[3],
+                                         m_activations_t.get_local_shape(),
+                                         m_output_decomposition_block);
+      assert0(m_prev_error_signals_t.allocate());
+      m_prev_error_signals_t.zero();
+    } else {
+      m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
+      assert_always(m_prev_error_signals_t.get_distribution() ==
+                    dists[3]);
+      assert_always(m_prev_error_signals_t.get_requested_local_block() ==
+                    m_output_decomposition_block);
+    }
+
+    // error_signals
+    m_error_signals_t = TensorDev(input_tensor_shape, loc,
+                                  dists[2], m_prev_error_signals_t.get_local_shape(),
+                                  m_input_decomposition_block);
+    assert0(m_error_signals_t.allocate());
+    m_error_signals_t.zero();
+
+    m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
+                                        input_local_shape, sample_block_size);
+
+    m_bn = new dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType>(
+        *this->m_cudnn->get_distconv_backend(), m_decay, m_epsilon);
+  }
+  
+#endif
 
 };
 

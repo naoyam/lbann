@@ -135,7 +135,7 @@ class relu_layer : public entrywise_activation_layer {
       early_terminate();
       fp_compute_distconv();
       if (m_exit_count == 0) {
-        dump_tensor(m_activations_t, get_name() + "_activations.txt");
+        dump_tensor(m_activations_t, get_name() + "_activations");
       } else {
         return;
       }
@@ -156,7 +156,7 @@ class relu_layer : public entrywise_activation_layer {
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
       dump_tensor(m_activations_copyout,
-                  get_name() + "_activations_original.txt");
+                  get_name() + "_activations_original");
     }
 #endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
@@ -172,7 +172,7 @@ class relu_layer : public entrywise_activation_layer {
       bp_compute_distconv();
       if (m_exit_count == 0) {
         dump_tensor(m_error_signals_t,
-                    get_name() + "_error_signals.txt");
+                    get_name() + "_error_signals");
       } else {
         return;
       }
@@ -196,7 +196,7 @@ class relu_layer : public entrywise_activation_layer {
       assert0(dc::tensor::View(m_error_signals_copyout,
                                m_error_signals_d[0].get_data(0)));      
       dump_tensor(m_error_signals_copyout,
-                  get_name() + "_error_signals_original.txt");
+                  get_name() + "_error_signals_original");
     }
 #endif
   #endif // LBANN_HAS_CUDNN

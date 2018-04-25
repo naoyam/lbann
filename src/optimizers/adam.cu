@@ -91,5 +91,5 @@ void adam::step_compute_gpu(AbsDistMat& values, const AbsDistMat& gradient) {
      m_moment2->Buffer(), m_moment2->LDim());
 
 }
-#endif
+
 }  // namespace lbann

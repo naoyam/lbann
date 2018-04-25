@@ -204,7 +204,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
         apply_bias_distconv();
 #if 1
         dump_tensor(m_activations_t,
-                    get_name() + "_activations.txt");
+                    get_name() + "_activations");
 #endif
         // activations may be updated with bias, so its copy should
         // be done after applying bias
@@ -222,7 +222,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
               m_activations_copyout, m_activations_d[0].get_data(0)));
 #if 1
           dump_tensor(m_activations_copyout,
-                      get_name() + "_activations_original.txt");
+                      get_name() + "_activations_original");
 #endif
         }
       } else {
@@ -248,13 +248,13 @@ class convolution_layer : public base_convolution_layer<Dev> {
         apply_transposed_convolution_distconv();
         if (m_exit_count == 0) {
           dump_tensor(m_error_signals_t,
-                      get_name() + "_error_signals.txt");
+                      get_name() + "_error_signals");
           compute_gradients_cudnn(false);
           apply_transposed_convolution_cudnn(false);
           assert0(dc::tensor::View(
               m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
           dump_tensor(m_error_signals_copyout,
-                      get_name() + "_error_signals_original.txt");
+                      get_name() + "_error_signals_original");
         }
       } else {
         base_convolution_layer<Dev>::compute_gradients_cudnn(false);
@@ -350,11 +350,11 @@ class convolution_layer : public base_convolution_layer<Dev> {
         m_prev_error_signals_redistributed = true;
       }
       //dump_tensor(m_prev_error_signals_const_view,
-      //"prev_error_signals_original.txt");
+      //"prev_error_signals_original");
     }
 
     //dump_tensor(m_prev_error_signals_t,
-    //"prev_error_signals_spatial.txt");
+    //"prev_error_signals_spatial");
 
 #if 0
     // The beta parameter is non-zero, so need to copy the error signals

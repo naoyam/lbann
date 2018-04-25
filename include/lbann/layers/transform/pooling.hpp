@@ -266,14 +266,14 @@ class pooling_layer : public transform_layer {
         if (m_exit_count == 0) {
 #if 1
           dump_tensor(m_activations_t,
-                      get_name() + "_activations.txt");
+                      get_name() + "_activations");
 #endif
           fp_compute_cudnn();
           assert0(dc::tensor::View(
               m_activations_copyout, m_activations_d[0].get_data(0)));
 #if 1
           dump_tensor(m_activations_copyout,
-                      get_name() + "_activations_original.txt");
+                      get_name() + "_activations_original");
 #endif
         }
       } else {
@@ -293,12 +293,12 @@ class pooling_layer : public transform_layer {
       if (m_distconv_enabled) {
         bp_compute_distconv();
         if (m_exit_count == 0) {
-          dump_tensor(m_error_signals_t, get_name() + "_error_signals.txt");        
+          dump_tensor(m_error_signals_t, get_name() + "_error_signals");        
           bp_compute_cudnn();
           assert0(dc::tensor::View(
               m_error_signals_copyout,
               m_error_signals_d[0].get_data(0)));
-          dump_tensor(m_error_signals_copyout, get_name() + "_error_signals_original.txt");
+          dump_tensor(m_error_signals_copyout, get_name() + "_error_signals_original");
         }
       } else {
         bp_compute_cudnn();        
