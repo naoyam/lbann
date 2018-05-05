@@ -459,11 +459,14 @@ class convolution_layer : public base_convolution_layer<Dev> {
       MPIPrintStreamDebug() << "Unsupported as padding does not match the kernel size\n";
       return false;
     }
+    // This is no longer necessary
+#if 0
     if (!(m_prev_neuron_dims[2] % m_strides[1] == 0 &&
           m_prev_neuron_dims[1] % m_strides[0] == 0)) {
       MPIPrintStreamDebug() << "Unsupported as tensor dimensions not devisible by strides\n";
       return false;
     }
+#endif
 #if 1
     char *env = getenv("DISTCONV_DISABLE");
     if (env) {
