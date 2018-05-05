@@ -272,6 +272,8 @@ class batch_normalization : public regularizer_layer {
           dump_tensor(m_activations_t,
                       get_name() + "_activations");
           fp_compute_gpu();
+          assert0(dc::tensor::View(
+              m_activations_copyout, m_activations_d[0].get_data(0)));
           dump_tensor(m_activations_copyout,
                       get_name() + "_activations_original");
         }
@@ -292,16 +294,11 @@ class batch_normalization : public regularizer_layer {
         if (m_exit_count == 0) {
           dump_tensor(m_error_signals_t,
                       get_name() + "_error_signals");
-          dump_tensor(m_prev_activations_t,
-                      get_name() + "_prev_activations");
-          dump_tensor(m_prev_activations_const_view,
-                      get_name() + "_prev_activations_original");
-          dump_tensor(m_prev_error_signals_t,
-                      get_name() + "_prev_error_signals");
-          dump_tensor(m_prev_error_signals_const_view,
-                      get_name() + "_prev_error_signals_original");
           m_error_signals_copyout.zero();
           bp_compute_gpu();
+          assert0(dc::tensor::View(
+              m_error_signals_copyout,
+              m_error_signals_d[0].get_data(0)));
           dump_tensor(m_error_signals_copyout,
                       get_name() + "_error_signals_original");
         }
@@ -885,7 +882,7 @@ class batch_normalization : public regularizer_layer {
         m_bias_gradient_d,
         DataType(1) / effective_mini_batch_size);
     }
-
+#if 0
     if (m_exit_count == 0) {
       if (m_prev_activations_t.get_locale().get_rank() == 0) {
         DataType *h = (DataType*)malloc(sizeof(DataType) * num_channels);
@@ -950,8 +947,8 @@ class batch_normalization : public regularizer_layer {
         out.close();
       }
     }
+#endif
 
-    // back to distconv
     m_bn->backward_stage2(m_prev_activations_t,
                           m_prev_error_signals_t,
                           m_mean_t, m_var_t, m_scale_t,
@@ -1032,6 +1029,10 @@ class batch_normalization : public regularizer_layer {
     //if (m_child_copy_required) {
     m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                       output_local_shape, sample_block_size);
+
+    MPIPrintStreamDebug()
+        << "BN prev_activations: " << m_prev_activations_t
+        << ", activations: " << m_activations_t << "\n";
 
     const int num_channels = this->m_neuron_dims[0];
     Array4 per_channel_stat_shape = {1, 1, num_channels, 1};
@@ -1133,6 +1134,10 @@ class batch_normalization : public regularizer_layer {
 
     m_bn = new dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType>(
         *this->m_cudnn->get_distconv_backend(), m_decay, m_epsilon);
+
+    MPIPrintStreamDebug()
+        << "BN prev_error_signals: " << m_prev_error_signals_t
+        << ", error_signals: " << m_error_signals_t << "\n";
   }
   
 #endif

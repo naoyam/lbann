@@ -596,13 +596,13 @@ class Layer {
     if (getenv("DISTCONV_DUMP")) {
       if (m_exit_count == 0) {
         MPIPrintStreamDebug() << "Dumping tensor to " << path << "\n";
-        m_cudnn->synchronize_all();
+        cudaDeviceSynchronize();
         dc::dump_tensor(t, path, true);
       }
     }
   }
 
-  int m_exit_count = 5;
+  int m_exit_count = 3;
   void early_terminate() {
     if (getenv("DISTCONV_EARLY_TERMINATE")) {
       --m_exit_count;

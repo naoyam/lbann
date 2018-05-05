@@ -229,8 +229,8 @@ class pooling_layer : public transform_layer {
       // This does not seem to be necessary. It's not clear what the
       // difference of the two algorithms is.
       if (getenv("DISTCONV_DETERMINISTIC")) {
-        //cudnn_pool_mode = CUDNN_POOLING_MAX_DETERMINISTIC;
-        cudnn_pool_mode = CUDNN_POOLING_MAX;
+        cudnn_pool_mode = CUDNN_POOLING_MAX_DETERMINISTIC;
+        //cudnn_pool_mode = CUDNN_POOLING_MAX;
       } else {
         cudnn_pool_mode = CUDNN_POOLING_MAX;
       }
