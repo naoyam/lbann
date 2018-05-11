@@ -30,7 +30,10 @@
 #include "lbann_config.hpp"
 
 #ifdef LBANN_HAS_DISTCONV
+
+#ifdef LBANN_DEBUG
 #define DISTCONV_DEBUG
+#endif
 
 #define DISTCONV_HAS_CUDNN
 
@@ -66,6 +69,7 @@ using LocaleMPI = dc::tensor::LocaleMPI;
 
 using MPIPrintStreamDebug = dc::util::MPIPrintStreamDebug;
 using MPIPrintStreamError = dc::util::MPIPrintStreamError;
+using MPIPrintStreamInfo = dc::util::MPIPrintStreamInfo;
 
 } // namespace lbann
 

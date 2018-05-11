@@ -1251,7 +1251,7 @@ void Layer::setup_tensors_fwd(const std::array<Dist, 4> &dists) {
   m_distconv_enabled = using_distconv();
 
   if (m_distconv_enabled) {
-    MPIPrintStreamDebug() << get_name() << ": distconv enabled\n";    
+    MPIPrintStreamInfo() << get_name() << ": distconv enabled\n";    
     const auto &child_layers = get_child_layers();
     MPIPrintStreamDebug() << ": number of children: "
                           << child_layers.size()
@@ -1275,7 +1275,7 @@ void Layer::setup_tensors_fwd(const std::array<Dist, 4> &dists) {
     MPIPrintStreamDebug() << "m_parent_copy_required: "
                           << m_parent_copy_required << "\n";
   } else {
-    MPIPrintStreamDebug() << get_name() << ": distconv disabled\n";
+    MPIPrintStreamInfo() << get_name() << ": distconv disabled\n";
   }
 }
 
