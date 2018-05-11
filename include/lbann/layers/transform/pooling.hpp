@@ -774,8 +774,9 @@ class pooling_layer : public transform_layer {
     }
 
     const Array4 output_spatial_local_shape =
-        dc::get_output_local_tensor_shape(m_prev_activations_t,
-                                          filter_dims, strides, false);
+        dc::get_pooling_output_local_tensor_shape(
+            m_prev_activations_t,
+            filter_dims, strides, false);
     MPIPrintStreamDebug()
         << "output_spatial_local_shape: " << output_spatial_local_shape << "\n";
     m_activations_t = TensorDev(output_tensor_shape,

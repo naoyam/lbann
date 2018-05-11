@@ -563,7 +563,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
          m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
     Array4 output_local_shape = output_tensor_shape;
     output_local_shape[3] = m_max_mini_batch_size_per_gpu;
-    const int filter_dims[2] = {m_kernel_dims[3], m_kernel_dims[2]};
+    const int filter_dims[4] = {m_kernel_dims[3], m_kernel_dims[2],
+                                m_kernel_dims[1], m_kernel_dims[0]};
     const int strides[2] = {m_strides[1], m_strides[0]};
     
     if (m_parent_copy_required) {
@@ -586,8 +587,9 @@ class convolution_layer : public base_convolution_layer<Dev> {
     }
 
     const Array4 output_spatial_local_shape =
-        dc::get_output_local_tensor_shape(m_prev_activations_t,
-                                          filter_dims, strides, true);
+        dc::get_convolution_output_local_tensor_shape(
+            m_prev_activations_t,
+            filter_dims, strides, true);
     MPIPrintStreamDebug()
         << "Convolution output_spatial_local_shape: " << output_spatial_local_shape << "\n";
     m_activations_t = TensorDev(output_tensor_shape,
