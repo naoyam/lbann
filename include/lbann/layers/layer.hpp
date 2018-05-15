@@ -619,12 +619,6 @@ class Layer {
   bool m_distconv_enabled = false;
   bool m_parent_copy_required = true;
   bool m_child_copy_required = true;
-#if 0
-  Dist m_prev_activations_dist;
-  Dist m_activations_dist;
-  Dist m_error_signals_dist;
-  Dist m_prev_error_signals_dist;
-#endif
   Array4 m_input_decomposition_block;
   Array4 m_output_decomposition_block;  
   /** Previous activation tensor */
@@ -638,6 +632,8 @@ class Layer {
   TensorDev m_activations_t;
   /** Elemental-format activation matrix */  
   TensorDev m_activations_copyout;
+  TensorShuffler<true> *m_prev_activations_shuffler = nullptr;
+  TensorShuffler<false> *m_activations_shuffler = nullptr;
   /** Previous error signal tensor */
   TensorDev m_prev_error_signals_t;
   /** View to Elemental matrix */
@@ -646,6 +642,8 @@ class Layer {
   TensorDev m_error_signals_t;
   /** Elemental-format matrix */
   TensorDev m_error_signals_copyout;
+  TensorShuffler<true> *m_prev_error_signals_shuffler = nullptr;
+  TensorShuffler<false> *m_error_signals_shuffler = nullptr;
 #endif // LBANN_HAS_DISTCONV
 
  private:

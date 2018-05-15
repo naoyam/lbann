@@ -37,6 +37,8 @@
 #include "lbann_config.hpp"
 #include "lbann/distconv.hpp"
 
+#define DISTCONV_USE_SHUFFLE
+
 namespace lbann {
 
 /// Convolution layer
@@ -212,8 +214,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
           MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
           assert0(dc::tensor::View(
               m_activations_copyout, m_activations_d[0].get_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+          m_activations_shuffler->shuffle_forward(
+              m_activations_t.get_base_ptr(),
+              m_activations_copyout.get_base_ptr(),
+              this->m_cudnn->get_stream(0));
+#else
           assert0(dc::tensor::Copy(
               m_activations_copyout, m_activations_t));
+#endif
         }
         if (m_exit_count == 0) {
           apply_convolution_cudnn(true);
@@ -291,8 +300,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_prev_activations_shuffler->shuffle_forward(
+          m_prev_activations_const_view.get_base_ptr(),
+          m_prev_activations_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
       assert0(dc::tensor::Copy(
           m_prev_activations_t, m_prev_activations_const_view));
+#endif
     } else {
       MPIPrintStreamDebug()
           << "Directly reading activations of previous layer\n";
@@ -345,8 +361,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
         assert0(dc::tensor::View(
             m_prev_error_signals_const_view,
             m_prev_error_signals_d[0].get_locked_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+        m_prev_error_signals_shuffler->shuffle_forward(
+            m_prev_error_signals_const_view.get_base_ptr(),
+            m_prev_error_signals_t.get_base_ptr(),
+            this->m_cudnn->get_stream(0));
+#else
         assert0(dc::tensor::Copy(
             m_prev_error_signals_t, m_prev_error_signals_const_view));
+#endif
         m_prev_error_signals_redistributed = true;
       }
       //dump_tensor(m_prev_error_signals_const_view,
@@ -378,8 +401,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
         MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
         assert0(dc::tensor::View(
             m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+        m_error_signals_shuffler->shuffle_forward(
+            m_error_signals_t.get_base_ptr(),
+            m_error_signals_copyout.get_base_ptr(),
+            this->m_cudnn->get_stream(0));
+#else
         assert0(distconv::tensor::Copy(
             m_error_signals_copyout, m_error_signals_t));
+#endif
       }
     }
 #endif    
@@ -407,8 +437,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
       MPIPrintStreamDebug() << "Compute bias gradients\n";      
       // Copy to sample distribution
       if (m_child_copy_required && !m_prev_error_signals_redistributed) {
+#ifdef DISTCONV_USE_SHUFFLE
+        m_prev_error_signals_shuffler->shuffle_forward(
+            m_prev_error_signals_const_view.get_base_ptr(),
+            m_prev_error_signals_t.get_base_ptr(),
+            this->m_cudnn->get_stream(0));
+#else
         assert0(dc::tensor::Copy(
             m_prev_error_signals_t, m_prev_error_signals_const_view));
+#endif
         m_prev_error_signals_redistributed = true;
       }
       assert0(dc::tensor::View(m_bias_gradient_t,
@@ -432,8 +469,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
     
     // Copy to sample distribution
     if (m_child_copy_required && !m_prev_error_signals_redistributed) {
-      assert0(dc::tensor::Copy(
+#ifdef DISTCONV_USE_SHUFFLE
+        m_prev_error_signals_shuffler->shuffle_forward(
+            m_prev_error_signals_const_view.get_base_ptr(),
+            m_prev_error_signals_t.get_base_ptr(),
+            this->m_cudnn->get_stream(0));
+#else
+        assert0(dc::tensor::Copy(
           m_prev_error_signals_t, m_prev_error_signals_const_view));
+#endif
       m_prev_error_signals_redistributed = true;
     }
 
@@ -576,7 +620,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
       m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
                                        spatial_local_size, m_input_decomposition_block);
       assert0(m_prev_activations_t.allocate());
-      m_prev_activations_t.zero();      
+      m_prev_activations_t.zero();
+      // create a shuffler
+      m_prev_activations_shuffler = new TensorShuffler<true>(
+          m_prev_activations_const_view, m_prev_activations_t);
     } else {
       MPIPrintStreamDebug() << "directly using prev activations: "
                             << get_parent_layers()[0]->get_activations_t() << "\n";
@@ -601,6 +648,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
     //if (m_child_copy_required) {
     m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                       output_local_shape, sample_block_size);
+    if (m_child_copy_required) {
+      m_activations_shuffler = new TensorShuffler<false>(
+          m_activations_t, m_activations_copyout);
+    }
 
     Array4 kernel_shape = {m_kernel_dims[3], m_kernel_dims[2],
                            m_kernel_dims[1], m_kernel_dims[0]};
@@ -672,6 +723,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
+      m_prev_error_signals_shuffler = new TensorShuffler<true>(
+          m_prev_error_signals_const_view, m_prev_error_signals_t);
     } else {
       m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
       MPIPrintStreamDebug() << get_name() << ": directly using prev error signals\n";
@@ -691,6 +744,11 @@ class convolution_layer : public base_convolution_layer<Dev> {
     //if (m_parent_copy_required) {
     m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
                                         input_local_shape, sample_block_size);
+
+    if (m_parent_copy_required) {
+      m_error_signals_shuffler = new TensorShuffler<false>(
+          m_error_signals_t, m_error_signals_copyout);
+    }
 
     if (getenv("DISTCONV_DETERMINISTIC")) {
       // Same algorithm as LBANN
@@ -733,5 +791,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
 };
 
 } // namespace lbann
+
+#undef DISTCONV_USE_SHUFFLE
 
 #endif // LBANN_LAYER_CONVOLUTION_HPP_INCLUDED

@@ -46,6 +46,7 @@
 #include "distconv/tensor/tensor_mpi.hpp"
 #include "distconv/tensor/tensor_cuda.hpp"
 #include "distconv/tensor/tensor_mpi_cuda.hpp"
+#include "distconv/tensor/shuffle.hpp"
 
 namespace dc = distconv;
 
@@ -53,16 +54,19 @@ namespace lbann {
 
 using Array4 = dc::tensor::Array<4>;
 
-using TensorHost = dc::tensor::Tensor<4, float, dc::tensor::LocaleMPI,
+using TensorHost = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                       dc::tensor::CUDAAllocator>;
-using ConstTensorHost = dc::tensor::Tensor<4, float, dc::tensor::LocaleMPI,
+using ConstTensorHost = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                            dc::tensor::CUDAAllocator, true>;
 
-using TensorDev = dc::tensor::Tensor<4, float, dc::tensor::LocaleMPI,
+using TensorDev = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                      dc::tensor::CUDAAllocator>;
 
-using ConstTensorDev = dc::tensor::Tensor<4, float, dc::tensor::LocaleMPI,
+using ConstTensorDev = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                           dc::tensor::CUDAAllocator, true>;
+
+template <bool CONST>
+using TensorShuffler = dc::tensor::TensorMPICUDAShuffler<4, DataType, CONST>;
 
 using Dist = dc::tensor::Distribution<4>;
 using LocaleMPI = dc::tensor::LocaleMPI;
