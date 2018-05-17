@@ -515,27 +515,8 @@ void model::setup_layers() {
     }
     updated = std::move(updated_new);
   }
-  std::cout << "Constraints satisfied\n";
   for (const auto& layer : m_layers) {
-#if 0
-    if (layer->get_name() == "pool2") {
-      dists[layer][1].set_overlap(0);
-      dists[layer][3].set_overlap(0);      
-    }
-#endif    
-#if 0
-    if (layer->get_name() == "relu3") {
-      for (int i = 0; i < 4; ++i) {
-        dists[layer][i].set_overlap(0);
-      }
-    }
-#endif    
-#if 0
-    if (layer->get_name() == "conv3") {
-      dists[layer][1].set_overlap(0);
-    }
-#endif    
-    MPIPrintStreamDebug()
+    MPIPrintStreamInfo()
         << layer->get_name()
         << "; prev_activations_dist: " << dists[layer][0]
         << ", activations_dist: " << dists[layer][1]
@@ -547,7 +528,6 @@ void model::setup_layers() {
   for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it) {  
     (*it)->setup_tensor_distribution_block();
   }
-  
   for (const auto& layer : m_layers) {
     layer->setup_tensors_fwd(dists[layer]);
   }

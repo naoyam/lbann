@@ -614,7 +614,8 @@ class pooling_layer : public transform_layer {
           m_prev_error_signals_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
 #else
-      assert0(dc::tensor::Copy(m_prev_error_signals_t, m_prev_error_signals_const_view));
+      assert0(dc::tensor::Copy(
+          m_prev_error_signals_t, m_prev_error_signals_const_view));
 #endif
     }
 
