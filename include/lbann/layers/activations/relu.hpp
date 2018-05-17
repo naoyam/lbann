@@ -32,6 +32,8 @@
 #include "lbann_config.hpp"
 #include "lbann/distconv.hpp"
 
+#define DISTCONV_USE_SHUFFLE
+
 namespace lbann {
 
 /** Rectified linear unit activation function.
@@ -167,6 +169,7 @@ class relu_layer : public entrywise_activation_layer {
   #ifndef LBANN_HAS_CUDNN
     LBANN_ERROR("cuDNN not detected");
   #else
+#if 1
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled) {
       bp_compute_distconv();
@@ -177,6 +180,7 @@ class relu_layer : public entrywise_activation_layer {
         return;
       }
     }
+#endif // LBANN_HAS_DISTCONV
 #endif
     const DataType one = 1;
     CHECK_CUDNN(cudnnActivationBackward(this->m_cudnn->get_handle(),
@@ -198,7 +202,7 @@ class relu_layer : public entrywise_activation_layer {
       dump_tensor(m_error_signals_copyout,
                   get_name() + "_error_signals_original");
     }
-#endif
+#endif // LBANN_HAS_DISTCONV
   #endif // LBANN_HAS_CUDNN
   }
 
@@ -251,7 +255,7 @@ class relu_layer : public entrywise_activation_layer {
 
     // DEBUG
     m_dump_tensors = true;
-    
+
     // REFACTORING: duplicated at convolution::setup_tensors
     const Array4 input_tensor_shape =
         {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
@@ -278,7 +282,9 @@ class relu_layer : public entrywise_activation_layer {
       m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
                                        spatial_local_size, m_input_decomposition_block);
       assert0(m_prev_activations_t.allocate());
-      m_prev_activations_t.zero();      
+      m_prev_activations_t.zero();
+      m_prev_activations_shuffler = new TensorShuffler<true>(
+          m_prev_activations_const_view, m_prev_activations_t);
     } else {
       MPIPrintStreamDebug() << "directly using prev activations\n";
       m_prev_activations_t = get_parent_layers()[0]->get_activations_t();      
@@ -295,6 +301,10 @@ class relu_layer : public entrywise_activation_layer {
     
     m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                       output_local_shape, sample_block_size);
+    if (m_child_copy_required) {
+      m_activations_shuffler = new TensorShuffler<false>(
+          m_activations_t, m_activations_copyout);
+    }
   }
 
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
@@ -330,6 +340,8 @@ class relu_layer : public entrywise_activation_layer {
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
+      m_prev_error_signals_shuffler = new TensorShuffler<true>(
+          m_prev_error_signals_const_view, m_prev_error_signals_t);
     } else {
       m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
       assert_always(m_prev_error_signals_t.get_distribution() ==
@@ -347,6 +359,10 @@ class relu_layer : public entrywise_activation_layer {
 
     m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
                                         input_local_shape, sample_block_size);
+    if (m_parent_copy_required) {
+      m_error_signals_shuffler = new TensorShuffler<false>(
+          m_error_signals_t, m_error_signals_copyout);
+    }
 
     // Init the dc::Pooling layer
     m_relu = new dc::ReLU<dc::cudnn::BackendCUDNN>(
@@ -368,7 +384,15 @@ class relu_layer : public entrywise_activation_layer {
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
-      assert0(dc::tensor::Copy(m_prev_activations_t, m_prev_activations_const_view));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_prev_activations_shuffler->shuffle_forward(
+          m_prev_activations_const_view.get_base_ptr(),
+          m_prev_activations_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
+      assert0(dc::tensor::Copy(
+          m_prev_activations_t, m_prev_activations_const_view));
+#endif
     } else {
       MPIPrintStreamDebug()
           << "Directly reading activations of previous layer\n";
@@ -379,7 +403,15 @@ class relu_layer : public entrywise_activation_layer {
       MPIPrintStreamDebug() << "Copying back to sample decomposition\n";      
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
-      assert0(dc::tensor::Copy(m_activations_copyout, m_activations_t));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_activations_shuffler->shuffle_forward(
+          m_activations_t.get_base_ptr(),
+          m_activations_copyout.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
+      assert0(dc::tensor::Copy(
+          m_activations_copyout, m_activations_t));
+#endif
     }
   }
 
@@ -392,7 +424,15 @@ class relu_layer : public entrywise_activation_layer {
       assert0(dc::tensor::View(
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
-      assert0(dc::tensor::Copy(m_prev_error_signals_t, m_prev_error_signals_const_view));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_prev_error_signals_shuffler->shuffle_forward(
+          m_prev_error_signals_const_view.get_base_ptr(),
+          m_prev_error_signals_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
+      assert0(dc::tensor::Copy(
+          m_prev_error_signals_t, m_prev_error_signals_const_view));
+#endif
     } else {
       MPIPrintStreamDebug()
           << "Directly reading activations of previous layer\n";
@@ -408,8 +448,16 @@ class relu_layer : public entrywise_activation_layer {
     if (m_parent_copy_required) {
       if (m_exit_count != 0) {
         MPIPrintStreamDebug() << "Copying back to sample decomposition\n";            
-        assert0(dc::tensor::View(m_error_signals_copyout, m_error_signals_d[0].get_data(0)));      
-        assert0(dc::tensor::Copy(m_error_signals_copyout, m_error_signals_t));
+        assert0(dc::tensor::View(m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+        m_error_signals_shuffler->shuffle_forward(
+            m_error_signals_t.get_base_ptr(),
+            m_error_signals_copyout.get_base_ptr(),
+            this->m_cudnn->get_stream(0));
+#else        
+        assert0(dc::tensor::Copy(
+            m_error_signals_copyout, m_error_signals_t));
+#endif
       }
     }
   }
@@ -421,5 +469,7 @@ class relu_layer : public entrywise_activation_layer {
 };
 
 } // namespace lbann
+
+#undef DISTCONV_USE_SHUFFLE
 
 #endif // LBANN_LAYER_ACTIVATION_RELU_HPP_INCLUDED

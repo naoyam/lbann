@@ -37,6 +37,8 @@
 #include "lbann/distconv.hpp"
 #endif // LBANN_HAS_DISTCONV
 
+#define DISTCONV_USE_SHUFFLE
+
 namespace lbann {
 
 /** Batch normalization layer.
@@ -782,8 +784,15 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_prev_activations_shuffler->shuffle_forward(
+          m_prev_activations_const_view.get_base_ptr(),
+          m_prev_activations_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
       assert0(dc::tensor::Copy(
           m_prev_activations_t, m_prev_activations_const_view));
+#endif
     }
 
     assert0(dc::tensor::View(
@@ -807,8 +816,15 @@ class batch_normalization : public regularizer_layer {
     if (m_child_copy_required) {
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_activations_shuffler->shuffle_forward(
+          m_activations_t.get_base_ptr(),
+          m_activations_copyout.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
       assert0(dc::tensor::Copy(
           m_activations_copyout, m_activations_t));
+#endif
     }
   }
   
@@ -824,8 +840,15 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_prev_error_signals_shuffler->shuffle_forward(
+          m_prev_error_signals_const_view.get_base_ptr(),
+          m_prev_error_signals_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else
       assert0(dc::tensor::Copy(
           m_prev_error_signals_t, m_prev_error_signals_const_view));
+#endif
     }
 
     assert0(dc::tensor::View(
@@ -959,8 +982,15 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_error_signals_copyout,
           m_error_signals_d[0].get_data(0)));
+#ifdef DISTCONV_USE_SHUFFLE
+      m_error_signals_shuffler->shuffle_forward(
+          m_error_signals_t.get_base_ptr(),
+          m_error_signals_copyout.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
+#else        
       assert0(dc::tensor::Copy(
           m_error_signals_copyout, m_error_signals_t));
+#endif
     }
   }
     
@@ -1013,6 +1043,8 @@ class batch_normalization : public regularizer_layer {
                                        spatial_local_size, m_input_decomposition_block);
       assert0(m_prev_activations_t.allocate());
       m_prev_activations_t.zero();
+      m_prev_activations_shuffler = new TensorShuffler<true>(
+          m_prev_activations_const_view, m_prev_activations_t);
     } else {
       m_prev_activations_t = get_parent_layers()[0]->get_activations_t();
       assert_always(m_prev_activations_t.get_distribution() == dists[0]);
@@ -1029,6 +1061,11 @@ class batch_normalization : public regularizer_layer {
     //if (m_child_copy_required) {
     m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                       output_local_shape, sample_block_size);
+
+    if (m_child_copy_required) {
+      m_activations_shuffler = new TensorShuffler<false>(
+          m_activations_t, m_activations_copyout);
+    }
 
     MPIPrintStreamDebug()
         << "BN prev_activations: " << m_prev_activations_t
@@ -1114,6 +1151,8 @@ class batch_normalization : public regularizer_layer {
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
+      m_prev_error_signals_shuffler = new TensorShuffler<true>(
+          m_prev_error_signals_const_view, m_prev_error_signals_t);
     } else {
       m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
       assert_always(m_prev_error_signals_t.get_distribution() ==
@@ -1131,6 +1170,10 @@ class batch_normalization : public regularizer_layer {
 
     m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
                                         input_local_shape, sample_block_size);
+    if (m_parent_copy_required) {
+      m_error_signals_shuffler = new TensorShuffler<false>(
+          m_error_signals_t, m_error_signals_copyout);
+    }
 
     m_bn = new dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType>(
         *this->m_cudnn->get_distconv_backend(), m_decay, m_epsilon);
@@ -1145,5 +1188,7 @@ class batch_normalization : public regularizer_layer {
 };
 
 } // namespace lbann
+
+#undef DISTCONV_USE_SHUFFLE
 
 #endif // LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED
