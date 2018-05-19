@@ -395,7 +395,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
     m_conv->backward_data(DataType(1.0), m_kernel_t, m_prev_error_signals_t,
                           DataType(1.0), m_error_signals_t);
 
-
     if (m_parent_copy_required) {
       if (m_exit_count != 0) {
         MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
@@ -470,12 +469,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
     // Copy to sample distribution
     if (m_child_copy_required && !m_prev_error_signals_redistributed) {
 #ifdef DISTCONV_USE_SHUFFLE
-        m_prev_error_signals_shuffler->shuffle_forward(
-            m_prev_error_signals_const_view.get_base_ptr(),
-            m_prev_error_signals_t.get_base_ptr(),
-            this->m_cudnn->get_stream(0));
+      m_prev_error_signals_shuffler->shuffle_forward(
+          m_prev_error_signals_const_view.get_base_ptr(),
+          m_prev_error_signals_t.get_base_ptr(),
+          this->m_cudnn->get_stream(0));
 #else
-        assert0(dc::tensor::Copy(
+      assert0(dc::tensor::Copy(
           m_prev_error_signals_t, m_prev_error_signals_const_view));
 #endif
       m_prev_error_signals_redistributed = true;
