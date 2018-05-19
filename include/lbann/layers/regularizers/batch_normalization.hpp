@@ -785,7 +785,7 @@ class batch_normalization : public regularizer_layer {
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
       m_prev_activations_shuffler->shuffle_forward(
-          m_prev_activations_const_view.get_base_ptr(),
+          m_prev_activations_const_view.get_const_base_ptr(),
           m_prev_activations_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
     }
@@ -812,7 +812,7 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
       m_activations_shuffler->shuffle_forward(
-          m_activations_t.get_base_ptr(),
+          m_activations_t.get_const_base_ptr(),
           m_activations_copyout.get_base_ptr(),
           this->m_cudnn->get_stream(0));
     }
@@ -831,7 +831,7 @@ class batch_normalization : public regularizer_layer {
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
       m_prev_error_signals_shuffler->shuffle_forward(
-          m_prev_error_signals_const_view.get_base_ptr(),
+          m_prev_error_signals_const_view.get_const_base_ptr(),
           m_prev_error_signals_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
     }
@@ -902,7 +902,7 @@ class batch_normalization : public regularizer_layer {
           m_error_signals_copyout,
           m_error_signals_d[0].get_data(0)));
       m_error_signals_shuffler->shuffle_forward(
-          m_error_signals_t.get_base_ptr(),
+          m_error_signals_t.get_const_base_ptr(),
           m_error_signals_copyout.get_base_ptr(),
           this->m_cudnn->get_stream(0));
     }

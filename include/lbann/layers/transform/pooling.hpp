@@ -566,7 +566,7 @@ class pooling_layer : public transform_layer {
           m_prev_activations_d[0].get_locked_data(0)));
 #ifdef DISTCONV_USE_SHUFFLE
       m_prev_activations_shuffler->shuffle_forward(
-          m_prev_activations_const_view.get_base_ptr(),
+          m_prev_activations_const_view.get_const_base_ptr(),
           m_prev_activations_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
 #else
@@ -585,7 +585,7 @@ class pooling_layer : public transform_layer {
           m_activations_copyout, m_activations_d[0].get_data(0)));
 #ifdef DISTCONV_USE_SHUFFLE
       m_activations_shuffler->shuffle_forward(
-          m_activations_t.get_base_ptr(),
+          m_activations_t.get_const_base_ptr(),
           m_activations_copyout.get_base_ptr(),
           this->m_cudnn->get_stream(0));
 #else
@@ -610,7 +610,7 @@ class pooling_layer : public transform_layer {
           m_prev_error_signals_d[0].get_locked_data(0)));
 #ifdef DISTCONV_USE_SHUFFLE
       m_prev_error_signals_shuffler->shuffle_forward(
-          m_prev_error_signals_const_view.get_base_ptr(),
+          m_prev_error_signals_const_view.get_const_base_ptr(),
           m_prev_error_signals_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
 #else
@@ -633,7 +633,7 @@ class pooling_layer : public transform_layer {
       if (m_exit_count != 0) {
 #ifdef DISTCONV_USE_SHUFFLE
         m_error_signals_shuffler->shuffle_forward(
-            m_error_signals_t.get_base_ptr(),
+            m_error_signals_t.get_const_base_ptr(),
             m_error_signals_copyout.get_base_ptr(),
             this->m_cudnn->get_stream(0));
 #else        
