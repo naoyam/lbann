@@ -784,15 +784,10 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
       m_prev_activations_shuffler->shuffle_forward(
           m_prev_activations_const_view.get_base_ptr(),
           m_prev_activations_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else
-      assert0(dc::tensor::Copy(
-          m_prev_activations_t, m_prev_activations_const_view));
-#endif
     }
 
     assert0(dc::tensor::View(
@@ -816,15 +811,10 @@ class batch_normalization : public regularizer_layer {
     if (m_child_copy_required) {
       assert0(dc::tensor::View(
           m_activations_copyout, m_activations_d[0].get_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
       m_activations_shuffler->shuffle_forward(
           m_activations_t.get_base_ptr(),
           m_activations_copyout.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else
-      assert0(dc::tensor::Copy(
-          m_activations_copyout, m_activations_t));
-#endif
     }
   }
   
@@ -840,15 +830,10 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_prev_error_signals_const_view,
           m_prev_error_signals_d[0].get_locked_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
       m_prev_error_signals_shuffler->shuffle_forward(
           m_prev_error_signals_const_view.get_base_ptr(),
           m_prev_error_signals_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else
-      assert0(dc::tensor::Copy(
-          m_prev_error_signals_t, m_prev_error_signals_const_view));
-#endif
     }
 
     assert0(dc::tensor::View(
@@ -905,72 +890,6 @@ class batch_normalization : public regularizer_layer {
         m_bias_gradient_d,
         DataType(1) / effective_mini_batch_size);
     }
-#if 0
-    if (m_exit_count == 0) {
-      if (m_prev_activations_t.get_locale().get_rank() == 0) {
-        DataType *h = (DataType*)malloc(sizeof(DataType) * num_channels);
-        cudaMemcpy(h, m_mean_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-        std::ofstream out;
-        out.open("m_mean_gradient.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-
-        cudaMemcpy(h, m_var_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-
-        out.open("m_var_gradient.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-        cudaMemcpy(h, m_scale_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-
-        out.open("m_scale_gradient.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-        cudaMemcpy(h, m_bias_gradient_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-
-        out.open("m_bias_gradient.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-
-        
-        assert0(dc::tensor::View(
-            m_mean_t, m_mean_d.get_data()[0]));
-        cudaMemcpy(h, m_mean_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-        out.open("m_mean.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-
-        cudaMemcpy(h, m_var_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-        out.open("m_var.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-        cudaMemcpy(h, m_scale_t.get_buffer(), sizeof(DataType) * num_channels,
-                   cudaMemcpyDeviceToHost);
-        out.open("m_scale.txt", std::ios::out | std::ios::trunc);
-        for (int i = 0; i < num_channels; ++i) {
-          out << h[i] << std::endl;
-        }
-        out.close();
-      }
-    }
-#endif
 
     m_bn->backward_stage2(m_prev_activations_t,
                           m_prev_error_signals_t,
@@ -982,15 +901,10 @@ class batch_normalization : public regularizer_layer {
       assert0(dc::tensor::View(
           m_error_signals_copyout,
           m_error_signals_d[0].get_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
       m_error_signals_shuffler->shuffle_forward(
           m_error_signals_t.get_base_ptr(),
           m_error_signals_copyout.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else        
-      assert0(dc::tensor::Copy(
-          m_error_signals_copyout, m_error_signals_t));
-#endif
     }
   }
     

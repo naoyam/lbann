@@ -37,8 +37,6 @@
 #include "lbann_config.hpp"
 #include "lbann/distconv.hpp"
 
-#define DISTCONV_USE_SHUFFLE
-
 namespace lbann {
 
 /// Convolution layer
@@ -204,10 +202,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
         early_terminate();
         apply_convolution_distconv();
         apply_bias_distconv();
-#if 1
         dump_tensor(m_activations_t,
                     get_name() + "_activations");
-#endif
         // activations may be updated with bias, so its copy should
         // be done after applying bias
         if (m_child_copy_required) {
@@ -229,10 +225,8 @@ class convolution_layer : public base_convolution_layer<Dev> {
           apply_bias_cudnn();
           assert0(dc::tensor::View(
               m_activations_copyout, m_activations_d[0].get_data(0)));
-#if 1
           dump_tensor(m_activations_copyout,
                       get_name() + "_activations_original");
-#endif
         }
       } else {
         base_convolution_layer<Dev>::apply_convolution_cudnn(true);
@@ -300,15 +294,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
       assert0(dc::tensor::View(
           m_prev_activations_const_view,
           m_prev_activations_d[0].get_locked_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
       m_prev_activations_shuffler->shuffle_forward(
           m_prev_activations_const_view.get_base_ptr(),
           m_prev_activations_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else
-      assert0(dc::tensor::Copy(
-          m_prev_activations_t, m_prev_activations_const_view));
-#endif
     } else {
       MPIPrintStreamDebug()
           << "Directly reading activations of previous layer\n";
@@ -361,36 +350,15 @@ class convolution_layer : public base_convolution_layer<Dev> {
         assert0(dc::tensor::View(
             m_prev_error_signals_const_view,
             m_prev_error_signals_d[0].get_locked_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
         m_prev_error_signals_shuffler->shuffle_forward(
             m_prev_error_signals_const_view.get_base_ptr(),
             m_prev_error_signals_t.get_base_ptr(),
             this->m_cudnn->get_stream(0));
-#else
-        assert0(dc::tensor::Copy(
-            m_prev_error_signals_t, m_prev_error_signals_const_view));
-#endif
         m_prev_error_signals_redistributed = true;
       }
-      //dump_tensor(m_prev_error_signals_const_view,
-      //"prev_error_signals_original");
     }
 
-    //dump_tensor(m_prev_error_signals_t,
-    //"prev_error_signals_spatial");
-
-#if 0
-    // The beta parameter is non-zero, so need to copy the error signals
-    if (m_parent_copy_required) {
-      assert0(dc::tensor::View(
-          m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-      assert0(dc::tensor::Copy(
-          m_error_signals_t, m_error_signals_copyout));
-    }
-#else
     m_error_signals_t.zero();
-#endif
-
     MPIPrintStreamDebug() << "Calling backward_data\n";
     m_conv->backward_data(DataType(1.0), m_kernel_t, m_prev_error_signals_t,
                           DataType(1.0), m_error_signals_t);
@@ -400,15 +368,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
         MPIPrintStreamDebug() << "Copying back to sample decomposition\n";
         assert0(dc::tensor::View(
             m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-#ifdef DISTCONV_USE_SHUFFLE
         m_error_signals_shuffler->shuffle_forward(
             m_error_signals_t.get_base_ptr(),
             m_error_signals_copyout.get_base_ptr(),
             this->m_cudnn->get_stream(0));
-#else
-        assert0(distconv::tensor::Copy(
-            m_error_signals_copyout, m_error_signals_t));
-#endif
       }
     }
 #endif    
@@ -436,15 +399,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
       MPIPrintStreamDebug() << "Compute bias gradients\n";      
       // Copy to sample distribution
       if (m_child_copy_required && !m_prev_error_signals_redistributed) {
-#ifdef DISTCONV_USE_SHUFFLE
         m_prev_error_signals_shuffler->shuffle_forward(
             m_prev_error_signals_const_view.get_base_ptr(),
             m_prev_error_signals_t.get_base_ptr(),
             this->m_cudnn->get_stream(0));
-#else
-        assert0(dc::tensor::Copy(
-            m_prev_error_signals_t, m_prev_error_signals_const_view));
-#endif
         m_prev_error_signals_redistributed = true;
       }
       assert0(dc::tensor::View(m_bias_gradient_t,
@@ -468,15 +426,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
     
     // Copy to sample distribution
     if (m_child_copy_required && !m_prev_error_signals_redistributed) {
-#ifdef DISTCONV_USE_SHUFFLE
       m_prev_error_signals_shuffler->shuffle_forward(
           m_prev_error_signals_const_view.get_base_ptr(),
           m_prev_error_signals_t.get_base_ptr(),
           this->m_cudnn->get_stream(0));
-#else
-      assert0(dc::tensor::Copy(
-          m_prev_error_signals_t, m_prev_error_signals_const_view));
-#endif
       m_prev_error_signals_redistributed = true;
     }
 
@@ -502,15 +455,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
       MPIPrintStreamDebug() << "Unsupported as padding does not match the kernel size\n";
       return false;
     }
-    // This is no longer necessary
-#if 0
-    if (!(m_prev_neuron_dims[2] % m_strides[1] == 0 &&
-          m_prev_neuron_dims[1] % m_strides[0] == 0)) {
-      MPIPrintStreamDebug() << "Unsupported as tensor dimensions not devisible by strides\n";
-      return false;
-    }
-#endif
-#if 1
     char *env = getenv("DISTCONV_DISABLE");
     if (env) {
       std::string s(env);
@@ -518,10 +462,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
         return false;
       }
     }
-    //if (get_name() == "pool2" || get_name() == "conv3") {
     return true;
-#endif
-    //return true;
   }
   
   Array4 get_prev_activations_overlap() const override {
@@ -790,7 +731,5 @@ class convolution_layer : public base_convolution_layer<Dev> {
 };
 
 } // namespace lbann
-
-#undef DISTCONV_USE_SHUFFLE
 
 #endif // LBANN_LAYER_CONVOLUTION_HPP_INCLUDED
