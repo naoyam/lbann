@@ -626,24 +626,24 @@ class Layer {
   TensorDev m_prev_activations_t;
   /** View to Elemental matrix of previous activations */
   // Created once, copied from m_prev_activations_t at fp_setup_data
-  ConstTensorDev m_prev_activations_const_view;
+  TensorDev m_prev_activations_const_view;
   /** Activation tensor */
   // Created once, copied back to m_activations_e after fp_compute
   TensorDev m_activations_t;
   /** Elemental-format activation matrix */  
   TensorDev m_activations_copyout;
-  TensorShuffler<true> *m_prev_activations_shuffler = nullptr;
-  TensorShuffler<false> *m_activations_shuffler = nullptr;
+  TensorShuffler *m_prev_activations_shuffler = nullptr;
+  TensorShuffler *m_activations_shuffler = nullptr;
   /** Previous error signal tensor */
   TensorDev m_prev_error_signals_t;
   /** View to Elemental matrix */
-  ConstTensorDev m_prev_error_signals_const_view;
+  TensorDev m_prev_error_signals_const_view;
   /** Error signal tensor */
   TensorDev m_error_signals_t;
   /** Elemental-format matrix */
   TensorDev m_error_signals_copyout;
-  TensorShuffler<true> *m_prev_error_signals_shuffler = nullptr;
-  TensorShuffler<false> *m_error_signals_shuffler = nullptr;
+  TensorShuffler *m_prev_error_signals_shuffler = nullptr;
+  TensorShuffler *m_error_signals_shuffler = nullptr;
 #endif // LBANN_HAS_DISTCONV
 
  private:

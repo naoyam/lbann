@@ -56,17 +56,11 @@ using Array4 = dc::tensor::Array<4>;
 
 using TensorHost = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                       dc::tensor::CUDAAllocator>;
-using ConstTensorHost = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
-                                           dc::tensor::CUDAAllocator, true>;
 
 using TensorDev = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
                                      dc::tensor::CUDAAllocator>;
 
-using ConstTensorDev = dc::tensor::Tensor<4, DataType, dc::tensor::LocaleMPI,
-                                          dc::tensor::CUDAAllocator, true>;
-
-template <bool CONST>
-using TensorShuffler = dc::tensor::TensorMPICUDAShuffler<4, DataType, CONST>;
+using TensorShuffler = dc::tensor::TensorMPICUDAShuffler<4, DataType>;
 
 using Dist = dc::tensor::Distribution<4>;
 using LocaleMPI = dc::tensor::LocaleMPI;

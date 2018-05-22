@@ -553,16 +553,16 @@ class convolution_layer : public base_convolution_layer<Dev> {
     
     if (m_parent_copy_required) {
       MPIPrintStreamDebug() << "copying prev activations required\n";      
-      m_prev_activations_const_view = ConstTensorDev(input_tensor_shape, loc,
-                                                     sample_dist,
-                                                     input_local_shape,
-                                                     sample_block_size);
+      m_prev_activations_const_view = TensorDev(input_tensor_shape, loc,
+                                                sample_dist,
+                                                input_local_shape,
+                                                sample_block_size);
       m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
                                        spatial_local_size, m_input_decomposition_block);
       assert0(m_prev_activations_t.allocate());
       m_prev_activations_t.zero();
       // create a shuffler
-      m_prev_activations_shuffler = new TensorShuffler<true>(
+      m_prev_activations_shuffler = new TensorShuffler(
           m_prev_activations_const_view, m_prev_activations_t);
     } else {
       MPIPrintStreamDebug() << "directly using prev activations: "
@@ -589,7 +589,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                       output_local_shape, sample_block_size);
     if (m_child_copy_required) {
-      m_activations_shuffler = new TensorShuffler<false>(
+      m_activations_shuffler = new TensorShuffler(
           m_activations_t, m_activations_copyout);
     }
 
@@ -653,17 +653,17 @@ class convolution_layer : public base_convolution_layer<Dev> {
     
     // prev_error_signals
     if (m_child_copy_required) {
-      m_prev_error_signals_const_view = ConstTensorDev(output_tensor_shape, loc,
-                                                       sample_dist,
-                                                       output_local_shape,
-                                                       sample_block_size);
+      m_prev_error_signals_const_view = TensorDev(output_tensor_shape, loc,
+                                                  sample_dist,
+                                                  output_local_shape,
+                                                  sample_block_size);
       m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
                                          dists[3],
                                          m_activations_t.get_local_shape(),
                                          m_output_decomposition_block);
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero();
-      m_prev_error_signals_shuffler = new TensorShuffler<true>(
+      m_prev_error_signals_shuffler = new TensorShuffler(
           m_prev_error_signals_const_view, m_prev_error_signals_t);
     } else {
       m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
@@ -686,7 +686,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
                                         input_local_shape, sample_block_size);
 
     if (m_parent_copy_required) {
-      m_error_signals_shuffler = new TensorShuffler<false>(
+      m_error_signals_shuffler = new TensorShuffler(
           m_error_signals_t, m_error_signals_copyout);
     }
 
