@@ -1250,32 +1250,100 @@ void Layer::setup_tensor_distribution_block() {
 void Layer::setup_tensors_fwd(const std::array<Dist, 4> &dists) {
   m_distconv_enabled = using_distconv();
 
-  if (m_distconv_enabled) {
-    MPIPrintStreamInfo() << get_name() << ": distconv enabled\n";    
-    const auto &child_layers = get_child_layers();
-    MPIPrintStreamDebug() << ": number of children: "
-                          << child_layers.size()
-                          << ", child name: " << child_layers[0]->get_name()
-                          << "\n";
-    if (child_layers.size() == 1 &&
-        child_layers[0]->using_distconv()) {
-      m_child_copy_required = false;
-    }
-    MPIPrintStreamDebug() << "m_child_copy_required: "
-                          << m_child_copy_required << "\n";
-    const auto &parent_layers = get_parent_layers();
-    MPIPrintStreamDebug() << ": number of parents: "
-                          << parent_layers.size()
-                          << ", parent name: " << parent_layers[0]->get_name()
-                          << "\n";
-    if (parent_layers.size() == 1 &&
-        parent_layers[0]->using_distconv()) {
-      m_parent_copy_required = false;
-    }
-    MPIPrintStreamDebug() << "m_parent_copy_required: "
-                          << m_parent_copy_required << "\n";
-  } else {
+  if (!m_distconv_enabled) {
     MPIPrintStreamInfo() << get_name() << ": distconv disabled\n";
+    return;
+  }
+
+
+  MPIPrintStreamInfo() << get_name() << ": distconv enabled\n";    
+  const auto &child_layers = get_child_layers();
+  MPIPrintStreamDebug() << ": number of children: "
+                        << child_layers.size()
+                        << ", child name: " << child_layers[0]->get_name()
+                        << "\n";
+  if (child_layers.size() == 1 &&
+      child_layers[0]->using_distconv()) {
+    m_child_copy_required = false;
+  }
+  MPIPrintStreamDebug() << "m_child_copy_required: "
+                        << m_child_copy_required << "\n";
+  const auto &parent_layers = get_parent_layers();
+  MPIPrintStreamDebug() << ": number of parents: "
+                        << parent_layers.size()
+                        << ", parent name: " << parent_layers[0]->get_name()
+                        << "\n";
+  if (parent_layers.size() == 1 &&
+      parent_layers[0]->using_distconv()) {
+    m_parent_copy_required = false;
+  }
+  MPIPrintStreamDebug() << "m_parent_copy_required: "
+                        << m_parent_copy_required << "\n";
+}
+
+void Layer::setup_prev_activations_tensor(const std::array<Dist, 4> &dists) {
+  const Array4 input_tensor_shape =
+      {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+       m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  const Array4 sample_block_size = {1, 1, 1, 1};      
+  const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
+  Array4 input_local_shape = input_tensor_shape;
+  // Assuming single GPU per rank
+  input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  const Array4 spatial_local_size = {0, 0, 0, 0};
+  
+  if (m_parent_copy_required) {
+    m_prev_activations_const_view = TensorDev(input_tensor_shape, loc,
+                                              sample_dist,
+                                              input_local_shape,
+                                              sample_block_size);
+    m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
+                                     spatial_local_size, m_input_decomposition_block);
+    assert0(m_prev_activations_t.allocate());
+    m_prev_activations_t.zero();
+    m_prev_activations_shuffler = new TensorShuffler(
+        m_prev_activations_const_view, m_prev_activations_t);
+  } else {
+    m_prev_activations_t = get_parent_layers()[0]->get_activations_t();
+    assert_always(m_prev_activations_t.get_distribution() == dists[0]);
+    assert_always(m_prev_activations_t.get_requested_local_block()
+                  == m_input_decomposition_block);
+  }
+}
+
+Array4 Layer::get_activations_tensor_local_shape() const {
+  return m_prev_activations_t.get_local_shape();
+}
+
+void Layer::setup_activations_tensor(const std::array<Dist, 4> &dists) {
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  const Array4 output_tensor_shape =
+      {m_neuron_dims[2], m_neuron_dims[1],
+       m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  const Array4 &activations_local_shape =
+      get_activations_tensor_local_shape();
+  m_activations_t = TensorDev(output_tensor_shape,
+                              loc, dists[1], activations_local_shape,
+                              m_output_decomposition_block);
+  assert0(m_activations_t.allocate());
+  m_activations_t.zero();
+}
+
+void Layer::setup_activations_copyout_tensor(const std::array<Dist, 4> &dists) {
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  const Array4 sample_block_size = {1, 1, 1, 1};    
+  const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
+  const Array4 output_tensor_shape =
+      {m_neuron_dims[2], m_neuron_dims[1],
+       m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  Array4 output_local_shape = output_tensor_shape;
+  output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
+                                    output_local_shape, sample_block_size);
+  if (m_child_copy_required) {
+    m_activations_shuffler = new TensorShuffler(
+        m_activations_t, m_activations_copyout);
   }
 }
 

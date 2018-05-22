@@ -554,6 +554,10 @@ class Layer {
   virtual void setup_tensor_distribution_block();
   // TODO: use dists
   virtual void setup_tensors_fwd(const std::array<Dist, 4> &dists);
+  virtual void setup_prev_activations_tensor(const std::array<Dist, 4> &dists);
+  virtual Array4 get_activations_tensor_local_shape() const;
+  virtual void setup_activations_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_activations_copyout_tensor(const std::array<Dist, 4> &dists);  
   virtual void setup_tensors_bwd(const std::array<Dist, 4> &dists);
   virtual Array4 get_prev_activations_overlap() const;
   virtual Array4 get_activations_overlap() const;  
@@ -590,7 +594,6 @@ class Layer {
 
   virtual Array4 get_strides() const;
 
-  bool m_dump_tensors = false;
   template <typename Tensor>
   void dump_tensor(const Tensor &t, const std::string &path) {
     if (getenv("DISTCONV_DUMP")) {

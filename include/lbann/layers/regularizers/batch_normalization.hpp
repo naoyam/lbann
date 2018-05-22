@@ -776,8 +776,8 @@ class batch_normalization : public regularizer_layer {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
-    assert_always(this->m_model->get_execution_mode() == execution_mode::training
-                  && "Inference not considered in the Distconv batch normalization");
+    const bool is_training =
+        this->m_model->get_execution_mode() == execution_mode::training;    
 
     m_bn->set_num_samples(this->m_model->get_current_mini_batch_size());
     assert_always(this->m_model->get_current_mini_batch_size() ==
@@ -809,7 +809,8 @@ class batch_normalization : public regularizer_layer {
                   m_running_var_t,
                   m_scale_t,
                   m_bias_t,
-                  m_activations_t);
+                  m_activations_t,
+                  is_training);
 
     if (m_child_copy_required) {
       assert0(dc::tensor::View(
@@ -928,61 +929,9 @@ class batch_normalization : public regularizer_layer {
     Layer::setup_tensors_fwd(dists);
     if (!m_distconv_enabled) return;    
     
-    MPIPrintStreamDebug()
-        << "batch_normalization: setup_tensors."
-        << "\n";
-
-    MPIPrintStreamDebug()
-        << "epsilon: " << m_epsilon << "\n";
-    
-    const Array4 input_tensor_shape =
-        {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
-         m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
-    const LocaleMPI loc(m_comm->get_model_comm().comm, false);
-    const Array4 sample_block_size = {1, 1, 1, 1};    
-    const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
-    Array4 input_local_shape = input_tensor_shape;
-    // Assuming single GPU per rank
-    input_local_shape[3] = m_max_mini_batch_size_per_gpu;
-    const Array4 spatial_local_size = {0, 0, 0, 0};
-    const Array4 output_tensor_shape =
-        {m_neuron_dims[2], m_neuron_dims[1],
-         m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
-    Array4 output_local_shape = output_tensor_shape;
-    output_local_shape[3] = m_max_mini_batch_size_per_gpu;
-
-    if (m_parent_copy_required) {
-      m_prev_activations_const_view = TensorDev(input_tensor_shape, loc,
-                                                sample_dist,
-                                                input_local_shape,
-                                                sample_block_size);
-      m_prev_activations_t = TensorDev(input_tensor_shape, loc, dists[0],
-                                       spatial_local_size, m_input_decomposition_block);
-      assert0(m_prev_activations_t.allocate());
-      m_prev_activations_t.zero();
-      m_prev_activations_shuffler = new TensorShuffler(
-          m_prev_activations_const_view, m_prev_activations_t);
-    } else {
-      m_prev_activations_t = get_parent_layers()[0]->get_activations_t();
-      assert_always(m_prev_activations_t.get_distribution() == dists[0]);
-      assert_always(m_prev_activations_t.get_requested_local_block()
-                    == m_input_decomposition_block);
-    }
-
-    m_activations_t = TensorDev(output_tensor_shape,
-                                loc, dists[1], m_prev_activations_t.get_local_shape(),
-                                m_output_decomposition_block);
-    assert0(m_activations_t.allocate());
-    m_activations_t.zero();
-    
-    //if (m_child_copy_required) {
-    m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
-                                      output_local_shape, sample_block_size);
-
-    if (m_child_copy_required) {
-      m_activations_shuffler = new TensorShuffler(
-          m_activations_t, m_activations_copyout);
-    }
+    setup_prev_activations_tensor(dists);
+    setup_activations_tensor(dists);
+    setup_activations_copyout_tensor(dists);
 
     MPIPrintStreamDebug()
         << "BN prev_activations: " << m_prev_activations_t
@@ -991,6 +940,7 @@ class batch_normalization : public regularizer_layer {
     const int num_channels = this->m_neuron_dims[0];
     Array4 per_channel_stat_shape = {1, 1, num_channels, 1};
     const auto shared_dist = Dist();
+    const LocaleMPI loc(m_comm->get_model_comm().comm, false);    
     // mean
     m_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
     assert0(dc::tensor::View(
