@@ -1350,6 +1350,70 @@ void Layer::setup_activations_copyout_tensor(const std::array<Dist, 4> &dists) {
 void Layer::setup_tensors_bwd(const std::array<Dist, 4> &dists) {
 }
 
+void Layer::setup_prev_error_signals_tensor(const std::array<Dist, 4> &dists) {
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  const Array4 sample_block_size = {1, 1, 1, 1};
+  const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
+  const Array4 output_tensor_shape =
+      {m_neuron_dims[2], m_neuron_dims[1],
+       m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  Array4 output_local_shape = output_tensor_shape;
+  output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  
+  if (m_child_copy_required) {
+    m_prev_error_signals_const_view = TensorDev(output_tensor_shape, loc,
+                                                sample_dist,
+                                                output_local_shape,
+                                                sample_block_size);
+    m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
+                                       dists[3],
+                                       m_activations_t.get_local_shape(),
+                                       m_output_decomposition_block);
+    assert0(m_prev_error_signals_t.allocate());
+    m_prev_error_signals_t.zero();
+    m_prev_error_signals_shuffler = new TensorShuffler(
+        m_prev_error_signals_const_view, m_prev_error_signals_t);
+  } else {
+    m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
+    assert_always(m_prev_error_signals_t.get_distribution() ==
+                  dists[3]);
+    assert_always(m_prev_error_signals_t.get_requested_local_block() ==
+                  m_output_decomposition_block);
+  }
+}
+
+void Layer::setup_error_signals_tensor(const std::array<Dist, 4> &dists) {
+  const Array4 input_tensor_shape =
+      {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+       m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  m_error_signals_t = TensorDev(input_tensor_shape, loc,
+                                dists[2],
+                                m_prev_activations_t.get_local_shape(),
+                                m_input_decomposition_block);
+  assert0(m_error_signals_t.allocate());
+  m_error_signals_t.zero();
+}
+
+void Layer::setup_error_signals_copyout_tensor(const std::array<Dist, 4> &dists) {
+  const Array4 input_tensor_shape =
+      {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
+       m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
+  const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+  const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
+  Array4 input_local_shape = input_tensor_shape;
+  // Assuming single GPU per rank
+  input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  const Array4 sample_block_size = {1, 1, 1, 1};
+  
+  m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
+                                      input_local_shape, sample_block_size);
+  if (m_parent_copy_required) {
+    m_error_signals_shuffler = new TensorShuffler(
+        m_error_signals_t, m_error_signals_copyout);
+  }
+}
+
 Array4 Layer::get_prev_activations_overlap() const {
   return Array4(0);  
 }
@@ -1400,6 +1464,65 @@ const TensorDev &Layer::get_error_signals_t() const {
 
 Array4 Layer::get_strides() const {
   return Array4(1);
+}
+
+void Layer::copy_in_prev_activations() {
+  if (!m_parent_copy_required) return;
+  MPIPrintStreamDebug() << "Copying previous activations from sample decomposition\n";  
+  assert0(dc::tensor::View(
+      m_prev_activations_const_view,
+      m_prev_activations_d[0].get_locked_data(0)));
+  m_prev_activations_shuffler->shuffle_forward(
+      m_prev_activations_const_view.get_const_base_ptr(),
+      m_prev_activations_t.get_base_ptr(),
+      this->m_cudnn->get_stream(0));
+}
+
+void Layer::copy_out_activations() {
+  if (!m_child_copy_required) return;
+  
+  MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";      
+  assert0(dc::tensor::View(
+      m_activations_copyout, m_activations_d[0].get_data(0)));
+  m_activations_shuffler->shuffle_forward(
+      m_activations_t.get_const_base_ptr(),
+      m_activations_copyout.get_base_ptr(),
+      this->m_cudnn->get_stream(0));
+}
+
+void Layer::copy_in_prev_error_signals() {
+  if (!m_child_copy_required) return;
+  
+  MPIPrintStreamDebug() << "Copying previous error signals from sample decomposition\n";            
+  assert0(dc::tensor::View(
+      m_prev_error_signals_const_view,
+      m_prev_error_signals_d[0].get_locked_data(0)));
+  m_prev_error_signals_shuffler->shuffle_forward(
+      m_prev_error_signals_const_view.get_const_base_ptr(),
+      m_prev_error_signals_t.get_base_ptr(),
+      this->m_cudnn->get_stream(0));
+}
+
+void Layer::copy_out_error_signals() {
+  if (!m_parent_copy_required) return;
+  
+  assert_always(get_parent_layers().size() == 1);
+  if (get_parent_layers()[0]->get_type().find("input:") == 0) {
+    // No need to copy back when the parent is an input layer
+    MPIPrintStreamDebug() << "Skipping copy back as the parent is an input layer\n";
+    return;
+  }
+  // No need to copy back as the original layer compute function
+  // will be called
+  if (m_exit_count == 0) return;
+    
+  MPIPrintStreamDebug() << "Copying error signals back to sample decomposition\n";
+  assert0(dc::tensor::View(
+      m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+  m_error_signals_shuffler->shuffle_forward(
+      m_error_signals_t.get_const_base_ptr(),
+      m_error_signals_copyout.get_base_ptr(),
+      this->m_cudnn->get_stream(0));
 }
 
 #endif

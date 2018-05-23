@@ -559,6 +559,9 @@ class Layer {
   virtual void setup_activations_tensor(const std::array<Dist, 4> &dists);
   virtual void setup_activations_copyout_tensor(const std::array<Dist, 4> &dists);  
   virtual void setup_tensors_bwd(const std::array<Dist, 4> &dists);
+  virtual void setup_prev_error_signals_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_error_signals_tensor(const std::array<Dist, 4> &dists);
+  virtual void setup_error_signals_copyout_tensor(const std::array<Dist, 4> &dists);
   virtual Array4 get_prev_activations_overlap() const;
   virtual Array4 get_activations_overlap() const;  
   virtual Array4 get_prev_error_signals_overlap() const;
@@ -593,6 +596,12 @@ class Layer {
  protected:
 
   virtual Array4 get_strides() const;
+
+  // Copis and converts input or output tensors when necessary
+  void copy_in_prev_activations();
+  void copy_out_activations();
+  void copy_in_prev_error_signals();
+  void copy_out_error_signals();
 
   template <typename Tensor>
   void dump_tensor(const Tensor &t, const std::string &path) {

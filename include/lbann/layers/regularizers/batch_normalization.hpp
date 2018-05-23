@@ -782,16 +782,8 @@ class batch_normalization : public regularizer_layer {
     m_bn->set_num_samples(this->m_model->get_current_mini_batch_size());
     assert_always(this->m_model->get_current_mini_batch_size() ==
                   get_prev_activations().Width());
-    
-    if (m_parent_copy_required) {
-      assert0(dc::tensor::View(
-          m_prev_activations_const_view,
-          m_prev_activations_d[0].get_locked_data(0)));
-      m_prev_activations_shuffler->shuffle_forward(
-          m_prev_activations_const_view.get_const_base_ptr(),
-          m_prev_activations_t.get_base_ptr(),
-          this->m_cudnn->get_stream(0));
-    }
+
+    copy_in_prev_activations();
 
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
@@ -812,14 +804,7 @@ class batch_normalization : public regularizer_layer {
                   m_activations_t,
                   is_training);
 
-    if (m_child_copy_required) {
-      assert0(dc::tensor::View(
-          m_activations_copyout, m_activations_d[0].get_data(0)));
-      m_activations_shuffler->shuffle_forward(
-          m_activations_t.get_const_base_ptr(),
-          m_activations_copyout.get_base_ptr(),
-          this->m_cudnn->get_stream(0));
-    }
+    copy_out_activations();
   }
   
   void bp_compute_distconv() {
@@ -830,15 +815,7 @@ class batch_normalization : public regularizer_layer {
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
     const int num_channels = this->m_neuron_dims[0];
     
-    if (m_child_copy_required) {
-      assert0(dc::tensor::View(
-          m_prev_error_signals_const_view,
-          m_prev_error_signals_d[0].get_locked_data(0)));
-      m_prev_error_signals_shuffler->shuffle_forward(
-          m_prev_error_signals_const_view.get_const_base_ptr(),
-          m_prev_error_signals_t.get_base_ptr(),
-          this->m_cudnn->get_stream(0));
-    }
+    copy_in_prev_error_signals();
 
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
@@ -901,15 +878,7 @@ class batch_normalization : public regularizer_layer {
                           m_mean_gradient_t, m_var_gradient_t,
                           m_error_signals_t);
 
-    if (m_parent_copy_required) {
-      assert0(dc::tensor::View(
-          m_error_signals_copyout,
-          m_error_signals_d[0].get_data(0)));
-      m_error_signals_shuffler->shuffle_forward(
-          m_error_signals_t.get_const_base_ptr(),
-          m_error_signals_copyout.get_base_ptr(),
-          this->m_cudnn->get_stream(0));
-    }
+    copy_out_error_signals();
   }
     
  protected:
@@ -989,58 +958,10 @@ class batch_normalization : public regularizer_layer {
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
     Layer::setup_tensors_bwd(dists);    
     if (!m_distconv_enabled) return;
-    
-    // REFACTORING: duplicated at convolution::setup_tensors
-    const Array4 input_tensor_shape =
-        {m_prev_neuron_dims[2], m_prev_neuron_dims[1],
-         m_prev_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
-    const LocaleMPI loc(m_comm->get_model_comm().comm, false);
-    const Array4 sample_block_size = {1, 1, 1, 1};
-    const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});    
-    Array4 input_local_shape = input_tensor_shape;
-    // Assuming single GPU per rank
-    input_local_shape[3] = m_max_mini_batch_size_per_gpu;
-    const Array4 output_tensor_shape =
-        {m_neuron_dims[2], m_neuron_dims[1],
-         m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
-    Array4 output_local_shape = output_tensor_shape;
-    output_local_shape[3] = m_max_mini_batch_size_per_gpu;
 
-    // prev_error_signals
-    if (m_child_copy_required) {
-      m_prev_error_signals_const_view = TensorDev(output_tensor_shape, loc,
-                                                  sample_dist,
-                                                  output_local_shape,
-                                                  sample_block_size);
-      m_prev_error_signals_t = TensorDev(output_tensor_shape, loc,
-                                         dists[3],
-                                         m_activations_t.get_local_shape(),
-                                         m_output_decomposition_block);
-      assert0(m_prev_error_signals_t.allocate());
-      m_prev_error_signals_t.zero();
-      m_prev_error_signals_shuffler = new TensorShuffler(
-          m_prev_error_signals_const_view, m_prev_error_signals_t);
-    } else {
-      m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
-      assert_always(m_prev_error_signals_t.get_distribution() ==
-                    dists[3]);
-      assert_always(m_prev_error_signals_t.get_requested_local_block() ==
-                    m_output_decomposition_block);
-    }
-
-    // error_signals
-    m_error_signals_t = TensorDev(input_tensor_shape, loc,
-                                  dists[2], m_prev_error_signals_t.get_local_shape(),
-                                  m_input_decomposition_block);
-    assert0(m_error_signals_t.allocate());
-    m_error_signals_t.zero();
-
-    m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
-                                        input_local_shape, sample_block_size);
-    if (m_parent_copy_required) {
-      m_error_signals_shuffler = new TensorShuffler(
-          m_error_signals_t, m_error_signals_copyout);
-    }
+    setup_prev_error_signals_tensor(dists);
+    setup_error_signals_tensor(dists);
+    setup_error_signals_copyout_tensor(dists);
 
     m_bn = new dc::BatchNormalization<dc::cudnn::BackendCUDNN, DataType>(
         *this->m_cudnn->get_distconv_backend(), m_decay, m_epsilon);
