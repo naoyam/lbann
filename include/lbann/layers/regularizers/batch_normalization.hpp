@@ -761,16 +761,6 @@ class batch_normalization : public regularizer_layer {
 
 #ifdef LBANN_HAS_DISTCONV
  public:
-  bool using_distconv() const override {
-    char *env = getenv("DISTCONV_DISABLE");
-    if (env) {
-      std::string s(env);
-      if (s.find(get_name()) != std::string::npos) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   void fp_compute_distconv() {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
@@ -783,7 +773,7 @@ class batch_normalization : public regularizer_layer {
     assert_always(this->m_model->get_current_mini_batch_size() ==
                   get_prev_activations().Width());
 
-    copy_in_prev_activations();
+    ensure_prev_activations();
 
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
@@ -815,7 +805,7 @@ class batch_normalization : public regularizer_layer {
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
     const int num_channels = this->m_neuron_dims[0];
     
-    copy_in_prev_error_signals();
+    ensure_prev_error_signals();
 
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
@@ -893,6 +883,17 @@ class batch_normalization : public regularizer_layer {
   TensorDev m_var_gradient_t;
   TensorDev m_scale_gradient_t;
   TensorDev m_bias_gradient_t;
+
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {
     Layer::setup_tensors_fwd(dists);

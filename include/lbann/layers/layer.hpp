@@ -63,7 +63,30 @@ struct ParallelStrategy {
   int filter_groups = 0;
   /** Number of times the layer is replicated (for FC layers right now). */
   int replications = 0;
+  bool operator==(const ParallelStrategy &ps) const {
+    return sample_groups == ps.sample_groups &&
+        height_groups == ps.height_groups &&
+        width_groups == ps.width_groups &&
+        channel_groups == ps.channel_groups &&
+        filter_groups == ps.filter_groups &&
+        replications == ps.replications;
+  }
+  bool operator!=(const ParallelStrategy &ps) const {
+    return !(*this == ps);
+  }
 };
+
+inline std::ostream &operator<<(std::ostream &os,
+                                const ParallelStrategy &ps) {
+  os << "{" << ps.sample_groups
+     << ", " << ps.height_groups
+     << ", " << ps.width_groups
+     << ", " << ps.channel_groups
+     << ", " << ps.filter_groups
+     << ", " << ps.replications
+     << "}";
+  return os;
+}
 
 /** Abstract base class for neural network layers.
  *  A layer takes input tensors ("previous activations") and applies a
@@ -368,6 +391,7 @@ class Layer {
 
   /** Get the parallel strategy for the layer. */
   ParallelStrategy& get_parallel_strategy() { return m_parallel_strategy; }
+  const ParallelStrategy& get_parallel_strategy() const { return m_parallel_strategy; }
 
  protected:
 
@@ -542,7 +566,9 @@ class Layer {
 
 #ifdef LBANN_HAS_DISTCONV
  public:
-  virtual bool using_distconv() const { return false; }
+  virtual void setup_distconv() {
+    m_distconv_enabled = using_distconv();
+  }
   virtual void setup_tensor_distribution_init(
       std::map<const Layer*, std::array<Dist, 4>> &dists, 
       std::map<Dist*, std::set<Dist*>> &invariants,
@@ -589,18 +615,22 @@ class Layer {
   //virtual ConstTensorDev get_activations_const_view() const;
   //virtual ConstTensorDev get_prev_activations_const_view() const;
 
+  bool distconv_enabled() const {
+    return m_distconv_enabled;
+  }
   void disable_distconv() {
     m_distconv_enabled = false;
   }
   
  protected:
+  virtual bool using_distconv() const { return false; }
 
   virtual Array4 get_strides() const;
 
   // Copis and converts input or output tensors when necessary
-  void copy_in_prev_activations();
+  void ensure_prev_activations();
   void copy_out_activations();
-  void copy_in_prev_error_signals();
+  void ensure_prev_error_signals();
   void copy_out_error_signals();
 
   template <typename Tensor>
@@ -629,8 +659,10 @@ class Layer {
   }
   
   bool m_distconv_enabled = false;
-  bool m_parent_copy_required = true;
-  bool m_child_copy_required = true;
+  bool m_parent_copy_in_required = false;
+  bool m_parent_shuffle_required = false;
+  bool m_child_copy_out_required = false;
+  bool m_child_shuffle_required = false;  
   Array4 m_input_decomposition_block;
   Array4 m_output_decomposition_block;  
   /** Previous activation tensor */

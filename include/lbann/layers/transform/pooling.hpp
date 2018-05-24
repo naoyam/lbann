@@ -558,7 +558,7 @@ class pooling_layer : public transform_layer {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
-    copy_in_prev_activations();
+    ensure_prev_activations();
 
     m_pooling->set_num_samples(this->m_model->get_current_mini_batch_size());
 
@@ -576,7 +576,7 @@ class pooling_layer : public transform_layer {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
-    copy_in_prev_error_signals();
+    ensure_prev_error_signals();
 
 #ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS    
     m_error_signals_t.zero();
@@ -593,50 +593,6 @@ class pooling_layer : public transform_layer {
   
 #ifdef LBANN_HAS_DISTCONV
  public:
-  bool using_distconv() const override {
-    if (!(m_pads[0] == 0 && m_pads[1] == 0)) {
-      MPIPrintStreamDebug() << "pooling: unsupported due to padding\n";
-      return false;
-    }
-    
-    if (!(m_pool_dims[0] % 2 != 0 && m_pool_dims[1] % 2 != 0)) {
-      MPIPrintStreamDebug() << "pooling: unsupported due to window shape\n";
-      return false;
-    }
-    
-    int stencil_h = (m_pool_dims[0] - 1) / 2;
-    int stencil_w = (m_pool_dims[1] - 1) / 2;
-
-    if (!((m_strides[0] == 1 && m_strides[1] == 1) ||
-         (m_strides[0] == stencil_h + 1 &&
-          m_strides[1] == stencil_w + 1))) {
-      MPIPrintStreamDebug() << "pooling: unsupported due to strides\n";
-      return false;
-    }
-#if 0
-    int input_tensor_w = m_prev_neuron_dims[2];
-    int input_tensor_h = m_prev_neuron_dims[1];
-
-    // shape dim must be divisible by strides
-    if (!(input_tensor_h % m_strides[0] == 0 &&
-          input_tensor_w % m_strides[1] == 0)) {
-      MPIPrintStreamDebug() << "pooling: Not divisible by strides: "
-                            << input_tensor_h << "x" << input_tensor_w
-                            << "\n";
-      return false;
-    }
-#endif
-    
-    char *env = getenv("DISTCONV_DISABLE");
-    if (env) {
-      std::string s(env);
-      if (s.find(get_name()) != std::string::npos) {
-        return false;
-      }
-    }
-
-    return true;
-  }
 
   void setup_tensor_distribution_init(
       std::map<const Layer*, std::array<Dist, 4>> &dists,      
@@ -645,10 +601,16 @@ class pooling_layer : public transform_layer {
       std::set<Dist*> &fixed) override {
     Layer::setup_tensor_distribution_init(
         dists, invariants, updated, fixed);
-    if (using_distconv()) {
+    if (distconv_enabled()) {
       int stencil_h = (m_pool_dims[0] - 1) / 2;
       int stencil_w = (m_pool_dims[1] - 1) / 2;
-      Array4 overlap({stencil_w, stencil_h, 0, 0});
+      Array4 overlap(0);
+      // TODO: don't add halo if group == 1
+      if (get_parallel_strategy().height_groups > 1 ||
+          get_parallel_strategy().width_groups > 1) {
+        overlap[0] = stencil_w;
+        overlap[1] = stencil_h;
+      }
       auto &prev_activations_dist = dists[this][0];
       auto &activations_dist = dists[this][1];
       auto &error_signals_dist = dists[this][2];            
@@ -670,37 +632,6 @@ class pooling_layer : public transform_layer {
           &error_signals_dist);
     }
   }
-#if 0
-  Array4 get_prev_activations_overlap() const override {
-    if (using_distconv()) {
-      int stencil_h = (m_pool_dims[0] - 1) / 2;
-      int stencil_w = (m_pool_dims[1] - 1) / 2;
-      return Array4({stencil_w, stencil_h, 0, 0});
-    } else {
-      return Array4(0);
-    }
-  }
-
-  Array4 get_activations_overlap() const override {
-    return Array4(0);
-  }
-
-  Array4 get_prev_error_signals_overlap() const override {
-    return Array4(0);
-  }
-
-  // pooling requires the error signals to have the same halo as the
-  // prev activations
-  Array4 get_error_signals_overlap() const override {
-    if (using_distconv()) {
-      int stencil_h = (m_pool_dims[0] - 1) / 2;
-      int stencil_w = (m_pool_dims[1] - 1) / 2;
-      return Array4({stencil_w, stencil_h, 0, 0});
-    } else {
-      return Array4(0);
-    }
-  }
-#endif
   Array4 get_strides() const override {
     return Array4({m_strides[1], m_strides[0], 1, 1});
   }
@@ -780,6 +711,38 @@ class pooling_layer : public transform_layer {
 
  protected:
   dc::Pooling<dc::cudnn::BackendCUDNN> *m_pooling;
+  
+  bool using_distconv() const override {
+    if (!(m_pads[0] == 0 && m_pads[1] == 0)) {
+      MPIPrintStreamDebug() << "pooling: unsupported due to padding\n";
+      return false;
+    }
+    
+    if (!(m_pool_dims[0] % 2 != 0 && m_pool_dims[1] % 2 != 0)) {
+      MPIPrintStreamDebug() << "pooling: unsupported due to window shape\n";
+      return false;
+    }
+    
+    int stencil_h = (m_pool_dims[0] - 1) / 2;
+    int stencil_w = (m_pool_dims[1] - 1) / 2;
+
+    if (!((m_strides[0] == 1 && m_strides[1] == 1) ||
+         (m_strides[0] == stencil_h + 1 &&
+          m_strides[1] == stencil_w + 1))) {
+      MPIPrintStreamDebug() << "pooling: unsupported due to strides\n";
+      return false;
+    }
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+  
 #endif
 
 };

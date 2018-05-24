@@ -491,6 +491,9 @@ void model::setup_layers() {
   std::set<Dist*> updated;
   std::set<Dist*> fixed;
   for (const auto& layer : m_layers) {  
+    layer->setup_distconv();
+  }
+  for (const auto& layer : m_layers) {  
     layer->setup_tensor_distribution_init(dists, invariants, updated, fixed);
   }
   for (const auto& layer : m_layers) {    
@@ -498,12 +501,12 @@ void model::setup_layers() {
         dists, invariants);
   }
   while (updated.size() > 0) {
-    std::cout << "# of updated dists: " << updated.size() << "\n";
+    MPIRootPrintStreamDebug() << "# of updated dists: " << updated.size() << "\n";
     std::set<Dist*> updated_new;    
     for (const auto d: updated) {
-      std::cout << "Updated: " << *d << "\n";
+      MPIRootPrintStreamDebug() << "Updated: " << *d << "\n";
       for (auto p: invariants[d]) {
-        std::cout << "Invariant: " << *p << "\n";
+        MPIRootPrintStreamDebug() << "Invariant: " << *p << "\n";
         if (d->get_overlap() != p->get_overlap()) {
           if (fixed.find(p) != fixed.end()) {
             throw lbann_exception("Cannot satisfy the distconv constraints");            
@@ -516,15 +519,19 @@ void model::setup_layers() {
     updated = std::move(updated_new);
   }
   for (const auto& layer : m_layers) {
-    MPIPrintStreamInfo()
-        << layer->get_name()
-        << "; prev_activations_dist: " << dists[layer][0]
-        << ", activations_dist: " << dists[layer][1]
-        << ", error_signals_dist: " << dists[layer][2]
-        << ", prev_error_signals_dist: " << dists[layer][3]
-        << "\n";
+    if (layer->distconv_enabled()) {
+      MPIRootPrintStreamInfo()
+          << layer->get_name()
+          << "; prev_activations_dist: " << dists[layer][0]
+          << ", activations_dist: " << dists[layer][1]
+          << ", error_signals_dist: " << dists[layer][2]
+          << ", prev_error_signals_dist: " << dists[layer][3]
+          << "\n";
+    } else {
+      MPIRootPrintStreamInfo()
+          << layer->get_name() << "; distconv disabled\n";
+    }
   }
-    
   for (auto it = m_layers.rbegin(); it != m_layers.rend(); ++it) {  
     (*it)->setup_tensor_distribution_block();
   }

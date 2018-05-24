@@ -68,6 +68,9 @@ using LocaleMPI = dc::tensor::LocaleMPI;
 using MPIPrintStreamDebug = dc::util::MPIPrintStreamDebug;
 using MPIPrintStreamError = dc::util::MPIPrintStreamError;
 using MPIPrintStreamInfo = dc::util::MPIPrintStreamInfo;
+using MPIRootPrintStreamDebug = dc::util::MPIRootPrintStreamDebug;
+using MPIRootPrintStreamError = dc::util::MPIRootPrintStreamError;
+using MPIRootPrintStreamInfo = dc::util::MPIRootPrintStreamInfo;
 
 } // namespace lbann
 

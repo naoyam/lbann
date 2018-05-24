@@ -233,7 +233,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        copy_in_prev_error_signals();
+        ensure_prev_error_signals();
         compute_gradients_distconv();
         apply_transposed_convolution_distconv();
         if (m_exit_count == 0) {
@@ -276,7 +276,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     // mini-batch iteration
     m_conv->set_num_samples(this->m_model->get_current_mini_batch_size());
 
-    copy_in_prev_activations();
+    ensure_prev_activations();
 
     assert0(dc::tensor::View(
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));
@@ -318,13 +318,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
     assert0(dc::tensor::View(
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));
 
-#if 0    
-    if (!m_prev_error_signals_redistributed) {
-      copy_in_prev_error_signals();
-      m_prev_error_signals_redistributed = true;
-    }
-#endif    
-
     m_error_signals_t.zero();
     MPIPrintStreamDebug() << "Calling backward_data\n";
     m_conv->backward_data(DataType(1.0), m_kernel_t, m_prev_error_signals_t,
@@ -342,24 +335,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
 #else
     MPIPrintStreamDebug() << get_name() << ": Compute gradients\n";
 
-    if (m_child_copy_required) {
-      assert0(dc::tensor::View(
-          m_prev_error_signals_const_view,
-          m_prev_error_signals_d[0].get_locked_data(0)));
-    }
-
     const int effective_mini_batch_size =
         this->m_model->get_effective_mini_batch_size();    
 
     optimizer* bias_optimizer = m_weights[1]->get_optimizer();
     if (bias_optimizer != nullptr && m_bias_scaling_factor != DataType(0)) {
       MPIPrintStreamDebug() << "Compute bias gradients\n";
-#if 0      
-      if (!m_prev_error_signals_redistributed) {
-        copy_in_prev_error_signals();
-        m_prev_error_signals_redistributed = true;
-      }
-#endif      
       assert0(dc::tensor::View(m_bias_gradient_t,
                                m_bias_gradient_d.get_data(0)));
       m_conv->backward_bias(DataType(1.0), m_prev_error_signals_t,
@@ -378,12 +359,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
     assert0(dc::tensor::View(
         m_kernel_gradient_e, m_kernel_gradient_d.get_data(0)));
-#if 0    
-    if (!m_prev_error_signals_redistributed) {
-      copy_in_prev_error_signals();
-      m_prev_error_signals_redistributed = true;
-    }
-#endif
 
     m_conv->backward_filter(DataType(1.0), m_prev_activations_t,
                             m_prev_error_signals_t, DataType(0),
@@ -400,25 +375,9 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
 #ifdef LBANN_HAS_DISTCONV
  public:
-  bool using_distconv() const override {
-    if (!(m_kernel_dims[2] == m_kernel_dims[3] &&
-          m_kernel_dims[2] == m_pads[0] * 2 + 1 &&
-          m_kernel_dims[3] == m_pads[1] * 2 + 1)) {
-      MPIPrintStreamDebug() << "Unsupported as padding does not match the kernel size\n";
-      return false;
-    }
-    char *env = getenv("DISTCONV_DISABLE");
-    if (env) {
-      std::string s(env);
-      if (s.find(get_name()) != std::string::npos) {
-        return false;
-      }
-    }
-    return true;
-  }
   
   Array4 get_prev_activations_overlap() const override {
-    if (using_distconv()) {
+    if (distconv_enabled()) {
       int stencil_h = (m_kernel_dims[2] - 1) / 2;
       int stencil_w = (m_kernel_dims[3] - 1) / 2;
       return Array4({stencil_w, stencil_h, 0, 0});
@@ -432,7 +391,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
   }
 
   Array4 get_prev_error_signals_overlap() const override {
-    if (using_distconv()) {
+    if (distconv_enabled()) {
       return get_prev_activations_overlap();
     } else {
       return Array4(0);
@@ -450,10 +409,16 @@ class convolution_layer : public base_convolution_layer<Dev> {
       std::set<Dist*> &fixed) override {
     Layer::setup_tensor_distribution_init(
         dists, invariants, updated, fixed);
-    if (using_distconv()) {
+    if (distconv_enabled()) {
       int stencil_h = (m_kernel_dims[2] - 1) / 2;
       int stencil_w = (m_kernel_dims[3] - 1) / 2;
-      Array4 overlap({stencil_w, stencil_h, 0, 0});
+      Array4 overlap(0);
+      // TODO: don't add halo if group == 1      
+      if (get_parallel_strategy().height_groups > 1 ||
+          get_parallel_strategy().width_groups > 1) {
+        overlap[0] = stencil_w;
+        overlap[1] = stencil_h;
+      }
       auto &prev_activations_dist = dists[this][0];
       prev_activations_dist.set_overlap(overlap);
       updated.insert(&prev_activations_dist);
@@ -564,7 +529,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
   }
   
  protected:
-
   dc::Convolution<dc::cudnn::BackendCUDNN> *m_conv;
   TensorDev m_kernel_t;
   TensorDev m_kernel_gradient_e;
@@ -576,9 +540,24 @@ class convolution_layer : public base_convolution_layer<Dev> {
   std::string m_bwd_data_algo = "DEFAULT";
   std::string m_bwd_filter_algo = "DEFAULT";
 
-  //bool m_prev_error_signals_redistributed = false;
 
-  // For debugging
+  bool using_distconv() const override {
+    if (!(m_kernel_dims[2] == m_kernel_dims[3] &&
+          m_kernel_dims[2] == m_pads[0] * 2 + 1 &&
+          m_kernel_dims[3] == m_pads[1] * 2 + 1)) {
+      MPIPrintStreamDebug() << "Unsupported as padding does not match the kernel size\n";
+      return false;
+    }
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
 
 #endif // LBANN_HAS_DISTCONV
   

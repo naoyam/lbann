@@ -206,16 +206,6 @@ class relu_layer : public entrywise_activation_layer {
 
 #ifdef LBANN_HAS_DISTCONV
  public:
-  bool using_distconv() const override {
-    char *env = getenv("DISTCONV_DISABLE");
-    if (env) {
-      std::string s(env);
-      if (s.find(get_name()) != std::string::npos) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   void setup_tensor_distribution_init(
       std::map<const Layer*, std::array<Dist, 4>> &dists,  
@@ -224,7 +214,7 @@ class relu_layer : public entrywise_activation_layer {
       std::set<Dist*> &fixed) override {
     Layer::setup_tensor_distribution_init(
         dists, invariants, updated, fixed);
-    if (!using_distconv()) return;
+    if (!distconv_enabled()) return;
     auto &layer_dists = dists[this];
 #ifdef DISTCONV_USE_SAME_RELU_CALL_AS_LBANN
     // This isn't necessary for cuDNN, but necessary to make it work
@@ -282,7 +272,7 @@ class relu_layer : public entrywise_activation_layer {
     
     m_relu->set_num_samples(this->m_model->get_current_mini_batch_size());
     
-    copy_in_prev_activations();
+    ensure_prev_activations();
     
     m_relu->forward(one, m_prev_activations_t, zero, m_activations_t);
 
@@ -294,7 +284,7 @@ class relu_layer : public entrywise_activation_layer {
     assert_always(m_distconv_enabled);
     const DataType one = 1;
 
-    copy_in_prev_error_signals();
+    ensure_prev_error_signals();
     
 #ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS
     m_error_signals_t.zero();
@@ -309,6 +299,18 @@ class relu_layer : public entrywise_activation_layer {
   
  protected:
   dc::ReLU<dc::cudnn::BackendCUDNN> *m_relu;
+
+  bool using_distconv() const override {
+    char *env = getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      if (s.find(get_name()) != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+  }
+  
 #endif
 
 };
