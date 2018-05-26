@@ -566,9 +566,7 @@ class Layer {
 
 #ifdef LBANN_HAS_DISTCONV
  public:
-  virtual void setup_distconv() {
-    m_distconv_enabled = using_distconv();
-  }
+  virtual void setup_distconv();
   virtual void setup_tensor_distribution_init(
       std::map<const Layer*, std::array<Dist, 4>> &dists, 
       std::map<Dist*, std::set<Dist*>> &invariants,
@@ -624,7 +622,9 @@ class Layer {
   
  protected:
   virtual bool using_distconv() const { return false; }
-
+  virtual void fp_setup_distconv(int mini_batch_size);
+  virtual void bp_setup_distconv(int mini_batch_size);  
+  
   virtual Array4 get_strides() const;
 
   // Copis and converts input or output tensors when necessary
@@ -644,18 +644,18 @@ class Layer {
     }
   }
 
-  int m_exit_count = 3;
+  // minus value disables early termination. DISTCONV_EARLY_TERMINATE
+  // environment value will override if set.
+  int m_exit_count = -1;
   void early_terminate() {
-    if (getenv("DISTCONV_EARLY_TERMINATE")) {
-      --m_exit_count;
-      if (m_exit_count < 0) {
-        MPIPrintStreamDebug() << "Early terminate\n";
-        MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Finalize();
-        cudaDeviceReset();
-        exit(0);
-      }
+    if (m_exit_count == 0) {
+      MPIPrintStreamDebug() << "Early terminate\n";
+      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Finalize();
+      cudaDeviceReset();
+      exit(0);
     }
+    if (m_exit_count > 0) --m_exit_count;
   }
   
   bool m_distconv_enabled = false;
@@ -677,7 +677,9 @@ class Layer {
   /** Elemental-format activation matrix */  
   TensorDev m_activations_copyout;
   TensorShuffler *m_prev_activations_shuffler = nullptr;
+  TensorShuffler *m_prev_activations_shuffler_last_mb[3];
   TensorShuffler *m_activations_shuffler = nullptr;
+  TensorShuffler *m_activations_shuffler_last_mb[3];
   /** Previous error signal tensor */
   TensorDev m_prev_error_signals_t;
   /** View to Elemental matrix */
@@ -687,7 +689,9 @@ class Layer {
   /** Elemental-format matrix */
   TensorDev m_error_signals_copyout;
   TensorShuffler *m_prev_error_signals_shuffler = nullptr;
+  TensorShuffler *m_prev_error_signals_shuffler_last_mb[3];
   TensorShuffler *m_error_signals_shuffler = nullptr;
+  TensorShuffler *m_error_signals_shuffler_last_mb[3];
 #endif // LBANN_HAS_DISTCONV
 
  private:

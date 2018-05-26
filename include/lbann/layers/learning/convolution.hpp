@@ -199,7 +199,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        early_terminate();
         apply_convolution_distconv();
         apply_bias_distconv();
         dump_tensor(m_activations_t,
@@ -233,7 +232,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        ensure_prev_error_signals();
         compute_gradients_distconv();
         apply_transposed_convolution_distconv();
         if (m_exit_count == 0) {
@@ -276,7 +274,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
     // mini-batch iteration
     m_conv->set_num_samples(this->m_model->get_current_mini_batch_size());
 
-    ensure_prev_activations();
 
     assert0(dc::tensor::View(
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));

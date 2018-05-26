@@ -236,6 +236,10 @@ void Layer::forward_prop() {
   if (using_gpus()) { this->m_cudnn->check_error(); }
   #endif // defined(LBANN_HAS_CUDNN) && defined(LBANN_DEBUG)
 
+#ifdef LBANN_HAS_DISTCONV
+  fp_setup_distconv(m_model->get_current_mini_batch_size());
+#endif
+
   // Apply layer's compute function
   const auto fp_compute_start = get_time();
   fp_compute();
@@ -265,6 +269,10 @@ void Layer::back_prop() {
   // Synchronize GPUs and check for errors
   if (using_gpus()) { this->m_cudnn->check_error(); }
   #endif // defined(LBANN_HAS_CUDNN) && defined(LBANN_DEBUG)
+
+#ifdef LBANN_HAS_DISTCONV
+  bp_setup_distconv(m_model->get_current_mini_batch_size());
+#endif
 
   // Backprop the compute function.
   const auto bp_compute_start = get_time();
@@ -1189,6 +1197,14 @@ void Layer::set_layer_pointers(std::vector<Layer*> layers) {
 }
 
 #ifdef LBANN_HAS_DISTCONV
+void Layer::setup_distconv() {
+  m_distconv_enabled = using_distconv();
+  char *count_str = getenv("DISTCONV_EARLY_TERMINATE");
+  if (count_str) {
+    m_exit_count = atoi(count_str);
+  }
+}
+
 void Layer::setup_tensor_distribution_init(
     std::map<const Layer*, std::array<Dist, 4>> &dists,
     std::map<Dist*, std::set<Dist*>> &invariants,
@@ -1382,6 +1398,10 @@ void Layer::setup_prev_activations_tensor(const std::array<Dist, 4> &dists) {
     m_prev_activations_t.zero();
     m_prev_activations_shuffler = new TensorShuffler(
         m_prev_activations_const_view, m_prev_activations_t);
+
+    for (int i = 0; i < 3; ++i) {
+      m_prev_activations_shuffler_last_mb[i] = nullptr;
+    }
   } else {
     m_prev_activations_t = get_parent_layers()[0]->get_activations_t();
     assert_always(m_prev_activations_t.get_distribution() == dists[0]);
@@ -1422,6 +1442,9 @@ void Layer::setup_activations_copyout_tensor(const std::array<Dist, 4> &dists) {
   if (m_child_copy_out_required) {
     m_activations_shuffler = new TensorShuffler(
         m_activations_t, m_activations_copyout);
+    for (int i = 0; i < 3; ++i) {
+      m_activations_shuffler_last_mb[i] = nullptr;
+    }
   }
 }
 
@@ -1456,6 +1479,9 @@ void Layer::setup_prev_error_signals_tensor(const std::array<Dist, 4> &dists) {
     m_prev_error_signals_t.zero();
     m_prev_error_signals_shuffler = new TensorShuffler(
         m_prev_error_signals_const_view, m_prev_error_signals_t);
+    for (int i = 0; i < 3; ++i) {
+      m_prev_error_signals_shuffler_last_mb[i] = nullptr;
+    }
   } else {
     m_prev_error_signals_t = get_child_layers()[0]->get_error_signals_t();
     assert_always(m_prev_error_signals_t.get_distribution() ==
@@ -1494,6 +1520,9 @@ void Layer::setup_error_signals_copyout_tensor(const std::array<Dist, 4> &dists)
   if (m_parent_copy_in_required) {
     m_error_signals_shuffler = new TensorShuffler(
         m_error_signals_t, m_error_signals_copyout);
+    for (int i = 0; i < 3; ++i) {
+      m_error_signals_shuffler_last_mb[i] = nullptr;
+    }
   }
 }
 
@@ -1549,6 +1578,62 @@ Array4 Layer::get_strides() const {
   return Array4(1);
 }
 
+void Layer::fp_setup_distconv(int mini_batch_size) {
+  if (!distconv_enabled()) return;
+
+  early_terminate();
+
+  // Reconfigure the sample dimension as the mini batch size may vary
+  // at the end of epoch
+  m_prev_activations_t.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_prev_activations_t.get_shape()[-1] ==
+                mini_batch_size);
+  if (m_parent_copy_in_required) {
+    m_prev_activations_const_view.set_outermost_dimension(mini_batch_size);
+    assert_always((int)m_prev_activations_const_view.get_shape()[-1] ==
+                  mini_batch_size);
+    assert_always((int)m_prev_activations_const_view.get_local_shape()[-1] ==
+                  m_mini_batch_size_per_gpu);
+  }
+  m_activations_t.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_activations_t.get_shape()[-1] ==
+                mini_batch_size);
+  m_activations_copyout.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_activations_copyout.get_shape()[-1] ==
+                mini_batch_size);
+  assert_always((int)m_activations_copyout.get_local_shape()[-1] ==
+                m_mini_batch_size_per_gpu);
+
+  ensure_prev_activations();
+}
+
+void Layer::bp_setup_distconv(int mini_batch_size) {
+  if (!distconv_enabled()) return;
+
+  // Reconfigure the sample dimension as the mini batch size may vary
+  // at the end of epoch
+  m_prev_error_signals_t.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_prev_error_signals_t.get_shape()[-1] ==
+                mini_batch_size);
+  if (m_child_copy_out_required) {
+    m_prev_error_signals_const_view.set_outermost_dimension(mini_batch_size);
+    assert_always((int)m_prev_error_signals_const_view.get_shape()[-1] ==
+                  mini_batch_size);
+    assert_always((int)m_prev_error_signals_const_view.get_local_shape()[-1] ==
+                  m_mini_batch_size_per_gpu);
+  }
+  m_error_signals_t.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_error_signals_t.get_shape()[-1] ==
+                mini_batch_size);
+  m_error_signals_copyout.set_outermost_dimension(mini_batch_size);
+  assert_always((int)m_error_signals_copyout.get_shape()[-1] ==
+                mini_batch_size);
+  assert_always((int)m_error_signals_copyout.get_local_shape()[-1] ==
+                m_mini_batch_size_per_gpu);
+
+  ensure_prev_error_signals();
+}
+
 void Layer::ensure_prev_activations() {
   if (!(m_parent_copy_in_required || m_parent_shuffle_required)) {
     return;
@@ -1561,7 +1646,21 @@ void Layer::ensure_prev_activations() {
   } else {
     assert_always(m_parent_shuffle_required);
   }
-  m_prev_activations_shuffler->shuffle_forward(
+  TensorShuffler *shuffler = nullptr;
+  if (this->m_model->get_max_mini_batch_size() ==
+      this->m_model->get_current_mini_batch_size()) {
+    shuffler = m_prev_activations_shuffler;
+  } else {
+    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());
+    assert_always(shfl_idx >= 0 && shfl_idx < 3);
+    if (m_prev_activations_shuffler_last_mb[shfl_idx] == nullptr) {
+      m_prev_activations_shuffler_last_mb[shfl_idx] = new TensorShuffler(
+          m_prev_activations_const_view, m_prev_activations_t);
+    }
+    shuffler = m_prev_activations_shuffler_last_mb[shfl_idx];      
+  }
+  assert_always(shuffler != nullptr);
+  shuffler->shuffle_forward(
       m_prev_activations_const_view.get_const_base_ptr(),
       m_prev_activations_t.get_base_ptr(),
       this->m_cudnn->get_stream(0));
@@ -1573,7 +1672,21 @@ void Layer::copy_out_activations() {
   MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";      
   assert0(dc::tensor::View(
       m_activations_copyout, m_activations_d[0].get_data(0)));
-  m_activations_shuffler->shuffle_forward(
+  TensorShuffler *shuffler = nullptr;
+  if (this->m_model->get_max_mini_batch_size() ==
+      this->m_model->get_current_mini_batch_size()) {
+    shuffler = m_activations_shuffler;
+  } else {
+    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());    
+    assert_always(shfl_idx >= 0 && shfl_idx < 3);
+    if (m_activations_shuffler_last_mb[shfl_idx] == nullptr) {
+      m_activations_shuffler_last_mb[shfl_idx] = new TensorShuffler(
+          m_activations_t, m_activations_copyout);          
+    }
+    shuffler = m_activations_shuffler_last_mb[shfl_idx];      
+  }
+  assert_always(shuffler != nullptr);
+  shuffler->shuffle_forward(
       m_activations_t.get_const_base_ptr(),
       m_activations_copyout.get_base_ptr(),
       this->m_cudnn->get_stream(0));
@@ -1591,7 +1704,22 @@ void Layer::ensure_prev_error_signals() {
   } else {
     assert_always(m_child_shuffle_required);
   }
-  m_prev_error_signals_shuffler->shuffle_forward(
+  TensorShuffler *shuffler = nullptr;
+  if (this->m_model->get_max_mini_batch_size() ==
+      this->m_model->get_current_mini_batch_size()) {
+    shuffler = m_prev_error_signals_shuffler;
+  } else {
+    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());        
+    assert_always(shfl_idx >= 0 && shfl_idx < 3);
+    if (m_prev_error_signals_shuffler_last_mb[shfl_idx] == nullptr) {
+      m_prev_error_signals_shuffler_last_mb[shfl_idx] = new TensorShuffler(
+          m_prev_error_signals_const_view, m_prev_error_signals_t);
+    }
+    shuffler = m_prev_error_signals_shuffler_last_mb[shfl_idx];      
+  }
+  assert_always(shuffler != nullptr);
+  
+  shuffler->shuffle_forward(
       m_prev_error_signals_const_view.get_const_base_ptr(),
       m_prev_error_signals_t.get_base_ptr(),
       this->m_cudnn->get_stream(0));
@@ -1600,8 +1728,11 @@ void Layer::ensure_prev_error_signals() {
 void Layer::copy_out_error_signals() {
   if (!m_parent_copy_in_required) return;
   
-  assert_always(get_parent_layers().size() == 1);
-  if (get_parent_layers()[0]->get_type().find("input:") == 0) {
+  const auto &parents = get_parent_layers();  
+  assert_always(parents.size() == 1);
+  const Layer *parent = parents[0];
+
+  if (parent->get_type().find("input:") == 0) {
     // No need to copy back when the parent is an input layer
     MPIPrintStreamDebug() << "Skipping copy back as the parent is an input layer\n";
     return;
@@ -1613,7 +1744,22 @@ void Layer::copy_out_error_signals() {
   MPIPrintStreamDebug() << "Copying error signals back to sample decomposition\n";
   assert0(dc::tensor::View(
       m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-  m_error_signals_shuffler->shuffle_forward(
+  TensorShuffler *shuffler = nullptr;
+  if (this->m_model->get_max_mini_batch_size() ==
+      this->m_model->get_current_mini_batch_size()) {
+    shuffler = m_error_signals_shuffler;
+  } else {
+    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());            
+    assert_always(shfl_idx >= 0 && shfl_idx < 3);
+    if (m_error_signals_shuffler_last_mb[shfl_idx] == nullptr) {
+      m_error_signals_shuffler_last_mb[shfl_idx] = new TensorShuffler(
+          m_error_signals_t, m_error_signals_copyout);
+    }
+    shuffler = m_error_signals_shuffler_last_mb[shfl_idx];      
+  }
+  assert_always(shuffler != nullptr);
+  
+  shuffler->shuffle_forward(
       m_error_signals_t.get_const_base_ptr(),
       m_error_signals_copyout.get_base_ptr(),
       this->m_cudnn->get_stream(0));

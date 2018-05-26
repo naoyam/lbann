@@ -261,7 +261,6 @@ class pooling_layer : public transform_layer {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        early_terminate();
         fp_compute_distconv();
         if (m_exit_count == 0) {
 #if 1
@@ -558,8 +557,6 @@ class pooling_layer : public transform_layer {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
-    ensure_prev_activations();
-
     m_pooling->set_num_samples(this->m_model->get_current_mini_batch_size());
 
     m_pooling->forward(DataType(1.0), m_prev_activations_t,
@@ -575,8 +572,6 @@ class pooling_layer : public transform_layer {
 #else
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
-
-    ensure_prev_error_signals();
 
 #ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS    
     m_error_signals_t.zero();

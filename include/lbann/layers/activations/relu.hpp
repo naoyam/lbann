@@ -132,7 +132,6 @@ class relu_layer : public entrywise_activation_layer {
   #else
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled) {
-      early_terminate();
       fp_compute_distconv();
       if (m_exit_count == 0) {
         dump_tensor(m_activations_t, get_name() + "_activations");
@@ -272,8 +271,6 @@ class relu_layer : public entrywise_activation_layer {
     
     m_relu->set_num_samples(this->m_model->get_current_mini_batch_size());
     
-    ensure_prev_activations();
-    
     m_relu->forward(one, m_prev_activations_t, zero, m_activations_t);
 
     copy_out_activations();
@@ -284,8 +281,6 @@ class relu_layer : public entrywise_activation_layer {
     assert_always(m_distconv_enabled);
     const DataType one = 1;
 
-    ensure_prev_error_signals();
-    
 #ifdef DISTCONV_ZERO_OUT_ERROR_SIGNALS
     m_error_signals_t.zero();
     m_relu->backward(one, m_activations_t, m_prev_error_signals_t,

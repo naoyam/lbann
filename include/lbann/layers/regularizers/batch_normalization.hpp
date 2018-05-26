@@ -268,7 +268,6 @@ class batch_normalization : public regularizer_layer {
     if (this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (m_distconv_enabled) {
-        early_terminate();
         fp_compute_distconv();
         if (m_exit_count == 0) {
           dump_tensor(m_activations_t,
@@ -296,11 +295,11 @@ class batch_normalization : public regularizer_layer {
         if (m_exit_count == 0) {
           dump_tensor(m_error_signals_t,
                       get_name() + "_error_signals");
-          m_error_signals_copyout.zero();
-          bp_compute_gpu();
           assert0(dc::tensor::View(
               m_error_signals_copyout,
               m_error_signals_d[0].get_data(0)));
+          m_error_signals_copyout.zero();
+          bp_compute_gpu();
           dump_tensor(m_error_signals_copyout,
                       get_name() + "_error_signals_original");
         }
@@ -773,8 +772,6 @@ class batch_normalization : public regularizer_layer {
     assert_always(this->m_model->get_current_mini_batch_size() ==
                   get_prev_activations().Width());
 
-    ensure_prev_activations();
-
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
     assert0(dc::tensor::View(
@@ -805,8 +802,6 @@ class batch_normalization : public regularizer_layer {
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
     const int num_channels = this->m_neuron_dims[0];
     
-    ensure_prev_error_signals();
-
     assert0(dc::tensor::View(
         m_scale_t, m_weights[0]->get_values_gpu()[0]));
 
