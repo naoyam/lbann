@@ -1397,7 +1397,11 @@ void Layer::setup_prev_activations_tensor(const std::array<Dist, 4> &dists) {
   const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
   Array4 input_local_shape = input_tensor_shape;
   // Assuming single GPU per rank
-  input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  //input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  // m_max_mini_batch_size_per_gpu is the maximum among all GPUs, so
+  // it's larger than the actual maximum size for some ranks when the
+  // mini batch size is not divisible.
+  input_local_shape[3] = 0;
   const Array4 spatial_local_size = {0, 0, 0, 0};
 
   if (m_parent_copy_in_required || m_parent_shuffle_required) {
@@ -1453,7 +1457,8 @@ void Layer::setup_activations_copyout_tensor(const std::array<Dist, 4> &dists) {
       {m_neuron_dims[2], m_neuron_dims[1],
        m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
   Array4 output_local_shape = output_tensor_shape;
-  output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  //output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  output_local_shape[3] = 0;
   m_activations_copyout = TensorDev(output_tensor_shape, loc, sample_dist,
                                     output_local_shape, sample_block_size);
   if (m_child_copy_out_required) {
@@ -1476,7 +1481,8 @@ void Layer::setup_prev_error_signals_tensor(const std::array<Dist, 4> &dists) {
       {m_neuron_dims[2], m_neuron_dims[1],
        m_neuron_dims[0], this->m_model->get_max_mini_batch_size()};
   Array4 output_local_shape = output_tensor_shape;
-  output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  //output_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  output_local_shape[3] = 0;
   
   if (m_child_copy_out_required || m_child_shuffle_required) {
     if (m_child_copy_out_required) {
@@ -1529,7 +1535,8 @@ void Layer::setup_error_signals_copyout_tensor(const std::array<Dist, 4> &dists)
   const Dist sample_dist = Dist({1, 1, 1, m_comm->get_procs_per_model()});
   Array4 input_local_shape = input_tensor_shape;
   // Assuming single GPU per rank
-  input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  //input_local_shape[3] = m_max_mini_batch_size_per_gpu;
+  input_local_shape[3] = 0;
   const Array4 sample_block_size = {1, 1, 1, 1};
   
   m_error_signals_copyout = TensorDev(input_tensor_shape, loc, sample_dist,
@@ -1666,6 +1673,9 @@ void Layer::ensure_prev_activations() {
   if (!(m_parent_copy_in_required || m_parent_shuffle_required)) {
     return;
   }
+  if (m_prev_activations_t.get_local_size() == 0) {
+    return;
+  }
   if (m_parent_copy_in_required) {
     MPIPrintStreamDebug() << "Copying previous activations from sample decomposition\n";
     assert0(dc::tensor::View(
@@ -1696,6 +1706,7 @@ void Layer::ensure_prev_activations() {
 
 void Layer::copy_out_activations() {
   if (!m_child_copy_out_required) return;
+  if (m_activations_t.get_local_size() == 0) return;
   
   MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";      
   assert0(dc::tensor::View(
@@ -1722,6 +1733,9 @@ void Layer::copy_out_activations() {
 
 void Layer::ensure_prev_error_signals() {
   if (!(m_child_copy_out_required || m_child_shuffle_required)) {
+    return;
+  }
+  if (m_prev_error_signals_t.get_local_size() == 0) {
     return;
   }
   if (m_child_copy_out_required) {  
@@ -1755,6 +1769,7 @@ void Layer::ensure_prev_error_signals() {
 
 void Layer::copy_out_error_signals() {
   if (!m_parent_copy_in_required) return;
+  if (m_error_signals_t.get_local_size() == 0) return;
   
   const auto &parents = get_parent_layers();  
   assert_always(parents.size() == 1);
