@@ -1673,9 +1673,7 @@ void Layer::ensure_prev_activations() {
   if (!(m_parent_copy_in_required || m_parent_shuffle_required)) {
     return;
   }
-  if (m_prev_activations_t.get_local_size() == 0) {
-    return;
-  }
+
   if (m_parent_copy_in_required) {
     MPIPrintStreamDebug() << "Copying previous activations from sample decomposition\n";
     assert0(dc::tensor::View(
@@ -1706,7 +1704,6 @@ void Layer::ensure_prev_activations() {
 
 void Layer::copy_out_activations() {
   if (!m_child_copy_out_required) return;
-  if (m_activations_t.get_local_size() == 0) return;
   
   MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";      
   assert0(dc::tensor::View(
@@ -1735,9 +1732,7 @@ void Layer::ensure_prev_error_signals() {
   if (!(m_child_copy_out_required || m_child_shuffle_required)) {
     return;
   }
-  if (m_prev_error_signals_t.get_local_size() == 0) {
-    return;
-  }
+
   if (m_child_copy_out_required) {  
     MPIPrintStreamDebug() << "Copying previous error signals from sample decomposition\n";            
     assert0(dc::tensor::View(
@@ -1769,7 +1764,6 @@ void Layer::ensure_prev_error_signals() {
 
 void Layer::copy_out_error_signals() {
   if (!m_parent_copy_in_required) return;
-  if (m_error_signals_t.get_local_size() == 0) return;
   
   const auto &parents = get_parent_layers();  
   assert_always(parents.size() == 1);
