@@ -270,10 +270,6 @@ class convolution_layer : public base_convolution_layer<Dev> {
         "Layer: DISTCONV not detected");
 #else
     MPIPrintStreamDebug() << get_name() << ": Forward convolution\n";
-    // there may only be a smaller number of samples for the last
-    // mini-batch iteration
-    m_conv->set_num_samples(this->m_model->get_current_mini_batch_size());
-
 
     assert0(dc::tensor::View(
         m_kernel_t, m_weights[0]->get_values_gpu()[0]));
@@ -410,10 +406,10 @@ class convolution_layer : public base_convolution_layer<Dev> {
       int stencil_h = (m_kernel_dims[2] - 1) / 2;
       int stencil_w = (m_kernel_dims[3] - 1) / 2;
       Array4 overlap(0);
-      // TODO: don't add halo if group == 1      
-      if (get_parallel_strategy().height_groups > 1 ||
-          get_parallel_strategy().width_groups > 1) {
+      if (get_parallel_strategy().width_groups > 1) {
         overlap[0] = stencil_w;
+      }
+      if (get_parallel_strategy().height_groups > 1) {
         overlap[1] = stencil_h;
       }
       auto &prev_activations_dist = dists[this][0];
@@ -457,7 +453,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
     MPIPrintStreamDebug()
         << "m_kernel_dims: " << ss.str() << "\n";
     
-    setup_prev_activations_tensor(dists);    
+    setup_prev_activations_tensor(dists);
     setup_activations_tensor(dists);
     setup_activations_copyout_tensor(dists);    
     

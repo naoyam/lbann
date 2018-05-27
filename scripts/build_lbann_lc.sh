@@ -615,7 +615,12 @@ if [ "${WITH_CUDA}" == "ON" ]; then
 
 	# CUDNN
 	if [ -z "${CUDNN_DIR}" ]; then
-		CUDNN_DIR=/usr/workspace/wsb/brain/cudnn/cudnn-7.1.1/cuda-${CUDA_TOOLKIT_VERSION}_${ARCH}
+		if [ "${CUDA_TOOLKIT_VERSION}" = 8.0 ]; then
+			CUDNN_VERSION=7.1.1
+		else
+			CUDNN_VERSION=7.1.4
+		fi
+		CUDNN_DIR=/usr/workspace/wsb/brain/cudnn/cudnn-${CUDNN_VERSION}/cuda-${CUDA_TOOLKIT_VERSION}_${ARCH}
 	fi
 	if [ ! -d "${CUDNN_DIR}" ]; then
 		echo "Could not find cuDNN at $CUDNN_DIR"

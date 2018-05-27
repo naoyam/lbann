@@ -1202,6 +1202,9 @@ void Layer::setup_distconv() {
   char *count_str = getenv("DISTCONV_EARLY_TERMINATE");
   if (count_str) {
     m_exit_count = atoi(count_str);
+    MPIRootPrintStreamInfo()
+        << "Exiting after " << m_exit_count
+        << " iterations\n";
   }
 }
 
@@ -1210,7 +1213,7 @@ void Layer::setup_tensor_distribution_init(
     std::map<Dist*, std::set<Dist*>> &invariants,
     std::set<Dist*> &updated,
     std::set<Dist*> &fixed) {
-  const auto &ps = get_parallel_strategy();
+  auto &ps = get_parallel_strategy();
   MPIRootPrintStreamInfo() << "Parallel Strategy for layer " << get_name()
                            << ": " << ps << "\n";
   int n = ps.sample_groups;
@@ -1219,14 +1222,21 @@ void Layer::setup_tensor_distribution_init(
   int h = ps.height_groups;
   int w = ps.width_groups;
   int np = m_comm->get_procs_per_model();
+  // if only one process is used, do not parallelize
+  if (np == 1) {
+    n = c = f = h = w = 1;
+  }
   if (distconv_enabled()) {
     if (c != f) {
       MPIRootPrintStreamError() << "The numbers of channel and filter decomposition should be the same.\n";
       throw lbann_exception();
     }
     if (n != 1) {
-      MPIRootPrintStreamError() << "Distconv does not support sample parallelization yet.\n";
-      throw lbann_exception();
+      // Sample parallelization is supported for Convolution 
+      if (get_type() != "convolution") {
+        MPIRootPrintStreamError() << "Distconv does not support sample parallelization yet.\n";
+        throw lbann_exception();
+      }
     }
     if (c != 1 || f != 1) {
       MPIRootPrintStreamError() << "Distconv does not support channel/filter parallelization yet.\n";
@@ -1259,7 +1269,14 @@ void Layer::setup_tensor_distribution_init(
                              << n << "x" << c << "x" << h << "x" << w << "\n";
   }
   
-  assert_always(!distconv_enabled() || h * w == np);
+  assert_always(!distconv_enabled() || (
+      h * w * n * c == np && h * w * n * f == np));
+  
+  ps.sample_groups = n;
+  ps.channel_groups = c;
+  ps.filter_groups = f;
+  ps.height_groups = h;
+  ps.width_groups = w;
   
   Dist prev_activations_dist =  Dist({w, h, c, n});
   Dist activations_dist =  Dist({w, h, f, n});
@@ -1588,13 +1605,21 @@ void Layer::fp_setup_distconv(int mini_batch_size) {
   m_prev_activations_t.set_outermost_dimension(mini_batch_size);
   assert_always((int)m_prev_activations_t.get_shape()[-1] ==
                 mini_batch_size);
-  if (m_parent_copy_in_required) {
-    m_prev_activations_const_view.set_outermost_dimension(mini_batch_size);
+  if (m_parent_copy_in_required || m_parent_shuffle_required) {
+    m_prev_activations_const_view.set_outermost_dimension(
+        mini_batch_size);
     assert_always((int)m_prev_activations_const_view.get_shape()[-1] ==
                   mini_batch_size);
-    assert_always((int)m_prev_activations_const_view.get_local_shape()[-1] ==
-                  m_mini_batch_size_per_gpu);
-  }
+    if (m_parent_copy_in_required) {
+      // then, parent is assumed to be data parallel, so the local
+      // size of the sample dimension should be equal to
+      // m_mini_batch_size_per_gpu. Note that one rank only has one
+      // GPU 
+      assert_always(
+          (int)m_prev_activations_const_view.get_local_shape()[-1] ==
+          m_mini_batch_size_per_gpu);
+    }
+  } 
   m_activations_t.set_outermost_dimension(mini_batch_size);
   assert_always((int)m_activations_t.get_shape()[-1] ==
                 mini_batch_size);
@@ -1615,12 +1640,15 @@ void Layer::bp_setup_distconv(int mini_batch_size) {
   m_prev_error_signals_t.set_outermost_dimension(mini_batch_size);
   assert_always((int)m_prev_error_signals_t.get_shape()[-1] ==
                 mini_batch_size);
-  if (m_child_copy_out_required) {
+  if (m_child_copy_out_required || m_child_shuffle_required) {
     m_prev_error_signals_const_view.set_outermost_dimension(mini_batch_size);
     assert_always((int)m_prev_error_signals_const_view.get_shape()[-1] ==
                   mini_batch_size);
-    assert_always((int)m_prev_error_signals_const_view.get_local_shape()[-1] ==
-                  m_mini_batch_size_per_gpu);
+    if (m_child_copy_out_required) {
+      assert_always(
+          (int)m_prev_error_signals_const_view.get_local_shape()[-1] ==
+          m_mini_batch_size_per_gpu);
+    }
   }
   m_error_signals_t.set_outermost_dimension(mini_batch_size);
   assert_always((int)m_error_signals_t.get_shape()[-1] ==
