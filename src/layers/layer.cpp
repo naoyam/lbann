@@ -1233,8 +1233,9 @@ void Layer::setup_tensor_distribution_init(
     }
     if (n != 1) {
       // Sample parallelization is supported for Convolution 
-      if (get_type() != "convolution") {
-        MPIRootPrintStreamError() << "Distconv does not support sample parallelization yet.\n";
+      if (get_type() != "convolution" &&
+          get_type() != "ReLU") {
+        MPIRootPrintStreamError() << "Layers except for convolution and ReLU do not support sample parallelization yet.\n";
         throw lbann_exception();
       }
     }

@@ -269,8 +269,6 @@ class relu_layer : public entrywise_activation_layer {
     const DataType one = 1;
     const DataType zero = 0;
     
-    m_relu->set_num_samples(this->m_model->get_current_mini_batch_size());
-    
     m_relu->forward(one, m_prev_activations_t, zero, m_activations_t);
 
     copy_out_activations();
