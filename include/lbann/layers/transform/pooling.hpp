@@ -557,8 +557,6 @@ class pooling_layer : public transform_layer {
     MPIPrintStreamDebug() << get_name() << ": " << __FUNCTION__ << "\n";
     assert_always(m_distconv_enabled);
 
-    m_pooling->set_num_samples(this->m_model->get_current_mini_batch_size());
-
     m_pooling->forward(DataType(1.0), m_prev_activations_t,
                        DataType(0.0), m_activations_t);
 
@@ -600,10 +598,10 @@ class pooling_layer : public transform_layer {
       int stencil_h = (m_pool_dims[0] - 1) / 2;
       int stencil_w = (m_pool_dims[1] - 1) / 2;
       Array4 overlap(0);
-      // TODO: don't add halo if group == 1
-      if (get_parallel_strategy().height_groups > 1 ||
-          get_parallel_strategy().width_groups > 1) {
+      if (get_parallel_strategy().width_groups > 1) {
         overlap[0] = stencil_w;
+      }
+      if (get_parallel_strategy().height_groups > 1) {
         overlap[1] = stencil_h;
       }
       auto &prev_activations_dist = dists[this][0];
