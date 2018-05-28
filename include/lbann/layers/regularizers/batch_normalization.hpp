@@ -766,9 +766,8 @@ class batch_normalization : public regularizer_layer {
     assert_always(m_distconv_enabled);
 
     const bool is_training =
-        this->m_model->get_execution_mode() == execution_mode::training;    
-
-    m_bn->set_num_samples(this->m_model->get_current_mini_batch_size());
+        this->m_model->get_execution_mode() == execution_mode::training;
+    
     assert_always(this->m_model->get_current_mini_batch_size() ==
                   get_prev_activations().Width());
 
