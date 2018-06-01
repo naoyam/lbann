@@ -33,7 +33,9 @@
 #include "lbann/layers/transform/dummy.hpp"
 #include "lbann/layers/transform/split.hpp"
 #include "lbann/utils/random.hpp"
+#ifdef LBANN_HAS_DISTCONV
 #include "lbann/distconv.hpp"
+#endif
 #include <string>
 #include <unistd.h>
 #include <iomanip>

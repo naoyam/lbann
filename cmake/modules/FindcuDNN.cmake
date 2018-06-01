@@ -19,9 +19,6 @@ find_path(CUDNN_INCLUDE_PATH cudnn.h
   )
 find_path(CUDNN_INCLUDE_PATH cudnn.h)
 
-message(STATUS "CUDNN_DIR: ${CUDNN_DIR}")
-message(STATUS "INCLUDE: ${CUDNN_INCLUDE_PATH}")
-
 find_library(CUDNN_LIBRARY cudnn
   HINTS ${CUDNN_DIR} $ENV{CUDNN_DIR} ${cuDNN_DIR} $ENV{cuDNN_DIR}
   ${CUDA_TOOLKIT_ROOT_DIR} ${CUDA_SDK_ROOT_DIR}
@@ -30,7 +27,6 @@ find_library(CUDNN_LIBRARY cudnn
   DOC "The cudnn library."
   )
 find_library(CUDNN_LIBRARY cudnn)
-message(STATUS "LIBRARY: ${CUDNN_LIBRARY}")
 
 # Standard handling of the package arguments
 include(FindPackageHandleStandardArgs)

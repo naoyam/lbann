@@ -27,7 +27,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "lbann/callbacks/callback_gradient_check.hpp"
-#include "lbann/distconv.hpp"
 
 namespace lbann {
 
@@ -44,15 +43,6 @@ void lbann_callback_gradient_check::on_test_begin(model *m) {
   lbann_comm *comm = m->get_comm();
   const std::vector<Layer*>& layers = m->get_layers();
 
-#if 1
-#ifdef LBANN_HAS_DISTCONV
-  // Disable distconv
-  for (auto&& l : layers) {
-    l->disable_distconv();
-  }
-#endif
-#endif
-  
   // Initialize network for testing
   for (auto&& w : m->get_weights()) {
     auto&& opt = w->get_optimizer();
@@ -116,11 +106,6 @@ void lbann_callback_gradient_check::on_test_begin(model *m) {
     // Iterate through weights matrix entries
     for (El::Int col = 0; col < weights_matrix.Width(); ++col) {
       for (El::Int row = 0; row < weights_matrix.Height(); ++row) {
-        if (comm->am_world_master()) {
-          std::cout << "--------------------------------------------------------------------------------" << std::endl;
-          std::cout << "Weight at (" <<  row << ", " << col << ")" << std::endl;
-        }
-        
         const bool weight_is_local = weights_matrix.IsLocal(row, col);
         const El::Int local_row = (weight_is_local ?
                                    weights_matrix.LocalRow(row) :

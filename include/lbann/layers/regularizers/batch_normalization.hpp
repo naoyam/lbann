@@ -37,8 +37,6 @@
 #include "lbann/distconv.hpp"
 #endif // LBANN_HAS_DISTCONV
 
-#define DISTCONV_USE_SHUFFLE
-
 namespace lbann {
 
 /** Batch normalization layer.
@@ -324,7 +322,7 @@ class batch_normalization : public regularizer_layer {
     const auto& input = get_prev_activations();
     const int height = input.Height();
     const int width = input.Width();
-    const int local_width = input.LocalWidth();    
+    const int local_width = input.LocalWidth();
     const int num_channels = this->m_neuron_dims[0];
     const int channel_size = this->m_num_neurons / num_channels;
 
@@ -404,8 +402,6 @@ class batch_normalization : public regularizer_layer {
     throw lbann_exception("batch_normalization_layer: cuDNN not detected");
   #else
     
-    const int num_channels = this->m_neuron_dims[0];
-
     // Check execution mode
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
 
@@ -424,7 +420,7 @@ class batch_normalization : public regularizer_layer {
     const int height = input.Height();
     const int width = input.Width();
     const int local_width = input.LocalWidth();
-
+    const int num_channels = this->m_neuron_dims[0];
 
     // Compute local gradient contributions
     batch_normalization_cuda
@@ -459,7 +455,6 @@ class batch_normalization : public regularizer_layer {
       Zero(*m_mean_gradient);
       Zero(*m_var_gradient);
     }
-
     optimizer* scale_optimizer = m_weights[0]->get_optimizer();
     if (scale_optimizer != nullptr) {
       scale_optimizer->add_to_gradient_staging(
@@ -971,7 +966,5 @@ class batch_normalization : public regularizer_layer {
 };
 
 } // namespace lbann
-
-#undef DISTCONV_USE_SHUFFLE
 
 #endif // LBANN_LAYER_REGULARIZER_BATCH_NORMALIZATION_HPP_INCLUDED

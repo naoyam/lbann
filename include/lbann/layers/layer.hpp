@@ -29,14 +29,15 @@
 
 #include "lbann/base.hpp"
 #include "lbann/comm.hpp"
+#ifdef LBANN_HAS_DISTCONV
 #include "lbann/distconv.hpp"
+#endif
 #include "lbann/utils/summary.hpp"
 #include "lbann/optimizers/optimizer.hpp"
 #include "lbann/utils/exception.hpp"
 #include "lbann/utils/cudnn_wrapper.hpp"
 #include "lbann/utils/timer.hpp"
 #include "lbann/io/persist.hpp"
-#include "lbann/distconv.hpp"
 #include <lbann.pb.h>
 #include <string>
 #include <vector>

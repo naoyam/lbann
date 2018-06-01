@@ -357,7 +357,6 @@ class base_convolution_layer : public learning_layer {
       output_cudnn_desc = this->m_error_signals_cudnn_desc;
     }
 
-
     // Perform convolution on the GPU
     // Determine convolution algorithm
     const size_t work_space_size = this->m_cudnn->get_work_space_size();
@@ -371,6 +370,7 @@ class base_convolution_layer : public learning_layer {
                                                     CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT,
                                                     work_space_size,
                                                     &convolution_cudnn_algorithm));
+
 #ifdef LBANN_HAS_DISTCONV
       if (getenv("DISTCONV_DETERMINISTIC")) {
         convolution_cudnn_algorithm = 
@@ -394,7 +394,9 @@ class base_convolution_layer : public learning_layer {
                                         &mixing_factor,
                                         output_cudnn_desc,
                                         output.Buffer()));
-  #endif // LBANN_HAS_CUDNN
+
+
+#endif // LBANN_HAS_CUDNN
   }
 
   /** Transposed convolution with cuDNN. */
@@ -430,7 +432,6 @@ class base_convolution_layer : public learning_layer {
       output_cudnn_desc = this->m_error_signals_cudnn_desc;
     }
 
-
     // Perform transposed convolution on the GPU
     // Determine transposed convolution algorithm
     const size_t work_space_size = this->m_cudnn->get_work_space_size();
@@ -452,7 +453,6 @@ class base_convolution_layer : public learning_layer {
             = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
       }
 #endif
-
     // Perform transposed convolution
     CHECK_CUDA(cudaSetDevice(this->m_cudnn->get_gpu()));
     CHECK_CUDNN(cudnnSetStream(this->m_cudnn->get_handle(),
@@ -470,6 +470,8 @@ class base_convolution_layer : public learning_layer {
                                              &mixing_factor,
                                              output_cudnn_desc,
                                              output.Buffer()));
+
+    
   #endif // LBANN_HAS_CUDNN
   }
 
@@ -595,6 +597,7 @@ class base_convolution_layer : public learning_layer {
                                                    &zero,
                                                    m_kernel_cudnn_desc,
                                                    m_kernel_gradient.Buffer()));
+        
       }
 
       // Add gradient contribution

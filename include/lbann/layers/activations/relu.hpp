@@ -30,7 +30,9 @@
 #include "lbann/layers/activations/activation.hpp"
 #include "lbann/utils/cudnn_wrapper.hpp"
 #include "lbann_config.hpp"
+#ifdef LBANN_HAS_DISTCONV
 #include "lbann/distconv.hpp"
+#endif
 
 namespace lbann {
 
@@ -109,8 +111,7 @@ class relu_layer : public entrywise_activation_layer {
                                              CUDNN_ACTIVATION_RELU,
                                              CUDNN_PROPAGATE_NAN,
                                              0.0));
-
-#endif // LBANN_HAS_CUDNN
+   #endif // LBANN_HAS_CUDNN
   }
 
  protected:
@@ -166,7 +167,6 @@ class relu_layer : public entrywise_activation_layer {
   #ifndef LBANN_HAS_CUDNN
     LBANN_ERROR("cuDNN not detected");
   #else
-#if 1
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled) {
       bp_compute_distconv();
@@ -178,7 +178,6 @@ class relu_layer : public entrywise_activation_layer {
       }
     }
 #endif // LBANN_HAS_DISTCONV
-#endif
     const DataType one = 1;
     CHECK_CUDNN(cudnnActivationBackward(this->m_cudnn->get_handle(),
                                         m_activation_cudnn_desc,
