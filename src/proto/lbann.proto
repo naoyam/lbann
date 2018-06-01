@@ -474,6 +474,7 @@ message CallbackPrint {
 }
 
 message CallbackProfiler {
+  int32 iterations_to_run = 1; // stops early instead of running until completion	
 }
 
 message CallbackTimer {

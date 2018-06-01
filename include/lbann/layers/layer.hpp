@@ -644,19 +644,10 @@ class Layer {
     }
   }
 
-  // minus value disables early termination. DISTCONV_EARLY_TERMINATE
+  // negative value disables early termination. DISTCONV_EARLY_TERMINATE
   // environment value will override if set.
   int m_exit_count = -1;
-  void early_terminate() {
-    if (m_exit_count == 0) {
-      MPIPrintStreamDebug() << "Early terminate\n";
-      MPI_Barrier(MPI_COMM_WORLD);
-      MPI_Finalize();
-      cudaDeviceReset();
-      exit(0);
-    }
-    if (m_exit_count > 0) --m_exit_count;
-  }
+  void early_terminate();
   
   bool m_distconv_enabled = false;
   bool m_parent_copy_in_required = false;

@@ -1197,6 +1197,17 @@ void Layer::set_layer_pointers(std::vector<Layer*> layers) {
 }
 
 #ifdef LBANN_HAS_DISTCONV
+void Layer::early_terminate() {
+  if (m_exit_count == 0) {
+    MPIPrintStreamDebug() << "Early terminate\n";
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
+    cudaDeviceReset();
+    exit(0);
+  }
+  if (m_exit_count > 0) --m_exit_count;
+}
+
 void Layer::setup_distconv() {
   m_distconv_enabled = using_distconv();
   char *count_str = getenv("DISTCONV_EARLY_TERMINATE");
