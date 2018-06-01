@@ -154,7 +154,7 @@ class relu_layer : public entrywise_activation_layer {
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled && m_exit_count == 0) {
       assert0(dc::tensor::View(
-          m_activations_copyout, m_activations_d[0].get_data(0)));
+          m_activations_copyout, get_activations().LockedBuffer()));
       dump_tensor(m_activations_copyout,
                   get_name() + "_activations_original");
     }
@@ -194,7 +194,7 @@ class relu_layer : public entrywise_activation_layer {
 #ifdef LBANN_HAS_DISTCONV
     if (m_distconv_enabled && m_exit_count == 0) {
       assert0(dc::tensor::View(m_error_signals_copyout,
-                               m_error_signals_d[0].get_data(0)));      
+                               get_error_signals().LockedBuffer()));
       dump_tensor(m_error_signals_copyout,
                   get_name() + "_error_signals_original");
     }

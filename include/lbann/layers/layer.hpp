@@ -634,21 +634,40 @@ class Layer {
   void ensure_prev_error_signals();
   void copy_out_error_signals();
 
+  // negative value disables early termination. DISTCONV_EARLY_TERMINATE
+  // environment value will override if set.
+  int m_exit_count = -1;
+  void early_terminate();
+  bool early_terminate_last_iteration() const;
+
   template <typename Tensor>
-  void dump_tensor(const Tensor &t, const std::string &path) {
+  void dump_tensor(const Tensor &t, const std::string &path) const {
     if (getenv("DISTCONV_DUMP")) {
-      if (m_exit_count == 0) {
+      if (early_terminate_last_iteration()) {
         MPIPrintStreamDebug() << "Dumping tensor to " << path << "\n";
         cudaDeviceSynchronize();
         dc::dump_tensor(t, path, true);
       }
     }
   }
-
-  // negative value disables early termination. DISTCONV_EARLY_TERMINATE
-  // environment value will override if set.
-  int m_exit_count = -1;
-  void early_terminate();
+  void dump_activations() const {
+    dump_tensor(m_activations_t, get_name() + "_activations");
+  }
+  void dump_reference_activations() {
+    assert0(dc::tensor::View(
+        m_activations_copyout, get_activations().LockedBuffer()));
+    dump_tensor(m_activations_copyout,
+                get_name() + "_activations_original");
+  }
+  void dump_error_signals() const {
+    dump_tensor(m_error_signals_t, get_name() + "_error_signals");
+  }
+  void dump_reference_error_signals() {
+    assert0(dc::tensor::View(
+        m_error_signals_copyout, get_error_signals().LockedBuffer()));
+    dump_tensor(m_error_signals_copyout,
+                get_name() + "_error_signals_original");
+  }
   
   bool m_distconv_enabled = false;
   bool m_parent_copy_in_required = false;

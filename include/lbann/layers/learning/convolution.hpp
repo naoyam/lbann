@@ -200,21 +200,17 @@ class convolution_layer : public base_convolution_layer<Dev> {
   void fp_compute() override {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
-      if (m_distconv_enabled) {
+      if (this->distconv_enabled()) {
         apply_convolution_distconv();
         apply_bias_distconv();
-        dump_tensor(m_activations_t,
-                    get_name() + "_activations");
         // activations may be updated with bias, so its copy should
         // be done after applying bias
-        copy_out_activations();
-        if (m_exit_count == 0) {
-          apply_convolution_cudnn(true);
-          apply_bias_cudnn();
-          assert0(dc::tensor::View(
-              m_activations_copyout, m_activations_d[0].get_data(0)));
-          dump_tensor(m_activations_copyout,
-                      get_name() + "_activations_original");
+        this->copy_out_activations();
+        if (this->early_terminate_last_iteration()) {
+          this->dump_activations();
+          base_convolution_layer<Dev>::apply_convolution_cudnn(true);
+          base_convolution_layer<Dev>::apply_bias_cudnn();
+          this->dump_reference_activations();
         }
       } else {
         base_convolution_layer<Dev>::apply_convolution_cudnn(true);
@@ -233,18 +229,14 @@ class convolution_layer : public base_convolution_layer<Dev> {
   void bp_compute() override {
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
-      if (m_distconv_enabled) {
+      if (this->distconv_enabled()) {
         compute_gradients_distconv();
         apply_transposed_convolution_distconv();
-        if (m_exit_count == 0) {
-          dump_tensor(m_error_signals_t,
-                      get_name() + "_error_signals");
-          compute_gradients_cudnn(false);
-          apply_transposed_convolution_cudnn(false);
-          assert0(dc::tensor::View(
-              m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
-          dump_tensor(m_error_signals_copyout,
-                      get_name() + "_error_signals_original");
+        if (this->early_terminate_last_iteration()) {
+          this->dump_error_signals();
+          base_convolution_layer<Dev>::compute_gradients_cudnn(false);
+          base_convolution_layer<Dev>::apply_transposed_convolution_cudnn(false);
+          this->dump_reference_error_signals();
         }
       } else {
         base_convolution_layer<Dev>::compute_gradients_cudnn(false);
@@ -266,13 +258,13 @@ class convolution_layer : public base_convolution_layer<Dev> {
         std::string {} + __FILE__ + " " + std::to_string(__LINE__) + " :: " +
         "Layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << get_name() << ": Forward convolution\n";
+    MPIPrintStreamDebug() << this->get_name() << ": Forward convolution\n";
 
     assert0(dc::tensor::View(
-        m_kernel_t, m_weights[0]->get_values_gpu()[0]));
+        m_kernel_t, this->get_weights()[0]->get_values().LockedBuffer()));
 
-    m_conv->forward(DataType(1.0), m_prev_activations_t, m_kernel_t,
-                    DataType(0.0), m_activations_t);
+    m_conv->forward(DataType(1.0), this->m_prev_activations_t, m_kernel_t,
+                    DataType(0.0), this->m_activations_t);
 #endif
   }
 
@@ -282,14 +274,14 @@ class convolution_layer : public base_convolution_layer<Dev> {
         std::string {} + __FILE__ + " " + std::to_string(__LINE__)
         + " :: " + "Layer: DISTCONV not detected");
 #else
-    if (m_bias_scaling_factor == DataType(0)) return;
+    if (this->m_bias_scaling_factor == DataType(0)) return;
 
     MPIPrintStreamDebug() << "Applying bias\n";
-    
+
     assert0(dc::tensor::View(
-        m_bias_t, m_weights[1]->get_values_gpu()[0]));
-    m_conv->apply_bias(m_bias_scaling_factor, m_bias_t,
-                       DataType(1), m_activations_t);
+        m_bias_t, this->get_weights()[1]->get_values().LockedBuffer()));
+    m_conv->apply_bias(this->m_bias_scaling_factor, m_bias_t,
+                       DataType(1), this->m_activations_t);
 #endif
   }
 
@@ -299,21 +291,21 @@ class convolution_layer : public base_convolution_layer<Dev> {
         std::string {} + __FILE__ + " " + std::to_string(__LINE__)
         + " :: " + "Layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << get_name() << ": Backward convolution\n";
+    MPIPrintStreamDebug() << this->get_name() << ": Backward convolution\n";
 
     // input: m_prev_error_signals_d[0]
     // kernel: m_weights[0]->get_values_gpu()
     // output: m_error_signals_d[0]
 
     assert0(dc::tensor::View(
-        m_kernel_t, m_weights[0]->get_values_gpu()[0]));
+        m_kernel_t, this->get_weights()[0]->get_values().LockedBuffer()));
 
-    m_error_signals_t.zero();
+    this->m_error_signals_t.zero();
     MPIPrintStreamDebug() << "Calling backward_data\n";
-    m_conv->backward_data(DataType(1.0), m_kernel_t, m_prev_error_signals_t,
-                          DataType(1.0), m_error_signals_t);
+    m_conv->backward_data(DataType(1.0), m_kernel_t, this->m_prev_error_signals_t,
+                          DataType(1.0), this->m_error_signals_t);
 
-    copy_out_error_signals();
+    this->copy_out_error_signals();
 #endif    
   }
 
@@ -323,41 +315,41 @@ class convolution_layer : public base_convolution_layer<Dev> {
         std::string {} + __FILE__ + " " + std::to_string(__LINE__)
         + " :: " + "Layer: DISTCONV not detected");
 #else
-    MPIPrintStreamDebug() << get_name() << ": Compute gradients\n";
+    MPIPrintStreamDebug() << this->get_name() << ": Compute gradients\n";
 
     const int effective_mini_batch_size =
         this->m_model->get_effective_mini_batch_size();    
 
-    optimizer* bias_optimizer = m_weights[1]->get_optimizer();
-    if (bias_optimizer != nullptr && m_bias_scaling_factor != DataType(0)) {
+    optimizer* bias_optimizer = this->get_weights()[1]->get_optimizer();
+    if (bias_optimizer != nullptr && this->m_bias_scaling_factor != DataType(0)) {
       MPIPrintStreamDebug() << "Compute bias gradients\n";
       assert0(dc::tensor::View(m_bias_gradient_t,
-                               m_bias_gradient_d.get_data(0)));
-      m_conv->backward_bias(DataType(1.0), m_prev_error_signals_t,
+                               this->m_bias_gradient.Buffer()));
+      m_conv->backward_bias(DataType(1.0), this->m_prev_error_signals_t,
                             DataType(0.0), m_bias_gradient_t, false);
-      const DataType bias_scale = m_bias_scaling_factor / effective_mini_batch_size;
-      if (m_exit_count != 0) {
-        bias_optimizer->add_to_gradient_staging(m_bias_gradient_d,
+      const DataType bias_scale = this->m_bias_scaling_factor / effective_mini_batch_size;
+      if (!this->early_terminate_last_iteration()) {
+        bias_optimizer->add_to_gradient_staging(this->m_bias_gradient,
                                                 bias_scale);
       }
     }
 
-    optimizer* kernel_optimizer = m_weights[0]->get_optimizer();
+    optimizer* kernel_optimizer = this->get_weights()[0]->get_optimizer();
     if (kernel_optimizer == nullptr) return;
 
     MPIPrintStreamDebug() << "Compute kernel gradients\n";          
 
     assert0(dc::tensor::View(
-        m_kernel_gradient_e, m_kernel_gradient_d.get_data(0)));
+        m_kernel_gradient_e, this->m_kernel_gradient.Buffer()));
 
-    m_conv->backward_filter(DataType(1.0), m_prev_activations_t,
-                            m_prev_error_signals_t, DataType(0),
+    m_conv->backward_filter(DataType(1.0), this->m_prev_activations_t,
+                            this->m_prev_error_signals_t, DataType(0),
                             m_kernel_gradient_e, false);
 
     // Add gradient contribution
     const DataType kernel_scale = DataType(1) / effective_mini_batch_size;
-    if (m_exit_count != 0) {
-      kernel_optimizer->add_to_gradient_staging(m_kernel_gradient_d,
+    if (!this->early_terminate_last_iteration()) {
+      kernel_optimizer->add_to_gradient_staging(this->m_kernel_gradient,
                                                 kernel_scale);
     }
 #endif    
@@ -367,9 +359,9 @@ class convolution_layer : public base_convolution_layer<Dev> {
  public:
   
   Array4 get_prev_activations_overlap() const override {
-    if (distconv_enabled()) {
-      int stencil_h = (m_kernel_dims[2] - 1) / 2;
-      int stencil_w = (m_kernel_dims[3] - 1) / 2;
+    if (this->distconv_enabled()) {
+      int stencil_h = (this->m_kernel_dims[2] - 1) / 2;
+      int stencil_w = (this->m_kernel_dims[3] - 1) / 2;
       return Array4({stencil_w, stencil_h, 0, 0});
     } else {
       return Array4(0);
@@ -381,7 +373,7 @@ class convolution_layer : public base_convolution_layer<Dev> {
   }
 
   Array4 get_prev_error_signals_overlap() const override {
-    if (distconv_enabled()) {
+    if (this->distconv_enabled()) {
       return get_prev_activations_overlap();
     } else {
       return Array4(0);
@@ -399,14 +391,14 @@ class convolution_layer : public base_convolution_layer<Dev> {
       std::set<Dist*> &fixed) override {
     Layer::setup_tensor_distribution_init(
         dists, invariants, updated, fixed);
-    if (distconv_enabled()) {
-      int stencil_h = (m_kernel_dims[2] - 1) / 2;
-      int stencil_w = (m_kernel_dims[3] - 1) / 2;
+    if (this->distconv_enabled()) {
+      int stencil_h = (this->m_kernel_dims[2] - 1) / 2;
+      int stencil_w = (this->m_kernel_dims[3] - 1) / 2;
       Array4 overlap(0);
-      if (get_parallel_strategy().width_groups > 1) {
+      if (this->get_parallel_strategy().width_groups > 1) {
         overlap[0] = stencil_w;
       }
-      if (get_parallel_strategy().height_groups > 1) {
+      if (this->get_parallel_strategy().height_groups > 1) {
         overlap[1] = stencil_h;
       }
       auto &prev_activations_dist = dists[this][0];
@@ -426,43 +418,44 @@ class convolution_layer : public base_convolution_layer<Dev> {
     }
   }
 
+  // Deprecated
   Array4 get_strides() const override {
-    return Array4({m_strides[1], m_strides[0], 1, 1});
+    return Array4({this->m_strides[1], this->m_strides[0], 1, 1});
   }
 
   Array4 get_activations_tensor_local_shape() const override {
-    const int filter_dims[4] = {m_kernel_dims[3], m_kernel_dims[2],
-                                m_kernel_dims[1], m_kernel_dims[0]};
-    const int strides[2] = {m_strides[1], m_strides[0]};
+    const int filter_dims[4] = {this->m_kernel_dims[3], this->m_kernel_dims[2],
+                                this->m_kernel_dims[1], this->m_kernel_dims[0]};
+    const int strides[2] = {this->m_strides[1], this->m_strides[0]};
     const Array4 output_spatial_local_shape =
         dc::get_convolution_output_local_tensor_shape(
-            m_prev_activations_t,
+            this->m_prev_activations_t,
             filter_dims, strides, true);
     return output_spatial_local_shape;
   }
 
   void setup_tensors_fwd(const std::array<Dist, 4> &dists) override {    
     Layer::setup_tensors_fwd(dists);
-    if (!m_distconv_enabled) return;
+    if (!this->distconv_enabled()) return;
 
     std::stringstream ss;
-    dc::util::print_vector(ss, m_kernel_dims.begin(), m_kernel_dims.end());
+    dc::util::print_vector(ss, this->m_kernel_dims.begin(), this->m_kernel_dims.end());
     MPIPrintStreamDebug()
         << "m_kernel_dims: " << ss.str() << "\n";
     
-    setup_prev_activations_tensor(dists);
-    setup_activations_tensor(dists);
-    setup_activations_copyout_tensor(dists);    
+    this->setup_prev_activations_tensor(dists);
+    this->setup_activations_tensor(dists);
+    this->setup_activations_copyout_tensor(dists);    
     
-    Array4 kernel_shape = {m_kernel_dims[3], m_kernel_dims[2],
-                           m_kernel_dims[1], m_kernel_dims[0]};
-    const LocaleMPI loc(m_comm->get_model_comm().comm, false);
+    Array4 kernel_shape = {this->m_kernel_dims[3], this->m_kernel_dims[2],
+                           this->m_kernel_dims[1], this->m_kernel_dims[0]};
+    const LocaleMPI loc(this->m_comm->get_model_comm().comm, false);
     m_kernel_t = TensorDev(kernel_shape, loc, Dist());
     assert0(dc::tensor::View(
-        m_kernel_t, m_weights[0]->get_values_gpu()[0]));
+        m_kernel_t, this->get_weights()[0]->get_values().LockedBuffer()));
     m_kernel_gradient_e = TensorDev(kernel_shape, loc, Dist());
     assert0(dc::tensor::View(
-        m_kernel_gradient_e, m_kernel_gradient_d.get_data(0)));
+        m_kernel_gradient_e, this->m_kernel_gradient.Buffer()));
     
     m_conv = new dc::Convolution<dc::cudnn::BackendCUDNN>(
         *this->m_cudnn->get_distconv_backend());
@@ -470,23 +463,23 @@ class convolution_layer : public base_convolution_layer<Dev> {
     // Bias tensor. Shared by all procs
     MPIPrintStreamDebug()
         << "Bias desc: "
-        << dc::util::tostring(m_bias_cudnn_desc)
-        << ", bias factor: " << m_bias_scaling_factor
+        << dc::util::tostring(this->m_bias_cudnn_desc)
+        << ", bias factor: " << this->m_bias_scaling_factor
         << "\n";
-    if (m_bias_scaling_factor != DataType(0)) {
-      Array4 bias_shape = {1, 1, m_neuron_dims[0], 1};
+    if (this->m_bias_scaling_factor != DataType(0)) {
+      Array4 bias_shape = {1, 1, this->m_neuron_dims[0], 1};
       m_bias_t = TensorDev(bias_shape, loc, Dist());
-      assert0(dc::tensor::View(m_bias_t, m_weights[1]->get_values_gpu()[0]));
+      assert0(dc::tensor::View(m_bias_t, this->get_weights()[1]->get_values().LockedBuffer()));
       MPIPrintStreamDebug()
           << "Bias tensor: " << m_bias_t << "\n";
       m_conv->setup_bias(m_bias_t);
 
       // Bias backprop
-      optimizer* bias_optimizer = m_weights[1]->get_optimizer();      
+      optimizer* bias_optimizer = this->get_weights()[1]->get_optimizer();      
       if (bias_optimizer != nullptr) {
         m_bias_gradient_t = TensorDev(bias_shape, loc, Dist());
         assert0(dc::tensor::View(m_bias_gradient_t,
-                                 m_bias_gradient_d.get_data(0)));
+                                 this->m_bias_gradient.Buffer()));
         m_conv->setup_bias_gradient(m_bias_gradient_t);
       }
     }
@@ -494,11 +487,11 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
   void setup_tensors_bwd(const std::array<Dist, 4> &dists) override {
     Layer::setup_tensors_bwd(dists);
-    if (!m_distconv_enabled) return;    
+    if (!this->distconv_enabled()) return;    
 
-    setup_prev_error_signals_tensor(dists);
-    setup_error_signals_tensor(dists);
-    setup_error_signals_copyout_tensor(dists);
+    this->setup_prev_error_signals_tensor(dists);
+    this->setup_error_signals_tensor(dists);
+    this->setup_error_signals_copyout_tensor(dists);
 
     if (getenv("DISTCONV_DETERMINISTIC")) {
       // Same algorithm as LBANN
@@ -508,12 +501,12 @@ class convolution_layer : public base_convolution_layer<Dev> {
       m_bwd_filter_algo = "ALGO1";
     }
     
-    m_conv->setup(m_prev_activations_t,
-                  m_kernel_t, m_activations_t,
-                  m_error_signals_t, m_kernel_gradient_e,
-                  m_prev_error_signals_t,
-                  m_pads[0], m_pads[1],
-                  m_strides[0], m_strides[1],
+    m_conv->setup(this->m_prev_activations_t,
+                  m_kernel_t, this->m_activations_t,
+                  this->m_error_signals_t, m_kernel_gradient_e,
+                  this->m_prev_error_signals_t,
+                  this->m_pads[0], this->m_pads[1],
+                  this->m_strides[0], this->m_strides[1],
                   m_fwd_algo, m_bwd_data_algo,
                   m_bwd_filter_algo);
   }
@@ -532,16 +525,16 @@ class convolution_layer : public base_convolution_layer<Dev> {
 
 
   bool using_distconv() const override {
-    if (!(m_kernel_dims[2] == m_kernel_dims[3] &&
-          m_kernel_dims[2] == m_pads[0] * 2 + 1 &&
-          m_kernel_dims[3] == m_pads[1] * 2 + 1)) {
+    if (!(this->m_kernel_dims[2] == this->m_kernel_dims[3] &&
+          this->m_kernel_dims[2] == this->m_pads[0] * 2 + 1 &&
+          this->m_kernel_dims[3] == this->m_pads[1] * 2 + 1)) {
       MPIPrintStreamDebug() << "Unsupported as padding does not match the kernel size\n";
       return false;
     }
     char *env = getenv("DISTCONV_DISABLE");
     if (env) {
       std::string s(env);
-      if (s.find(get_name()) != std::string::npos) {
+      if (s.find(this->get_name()) != std::string::npos) {
         return false;
       }
     }

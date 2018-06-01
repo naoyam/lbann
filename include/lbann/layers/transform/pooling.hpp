@@ -269,7 +269,7 @@ class pooling_layer : public transform_layer {
 #endif
           fp_compute_cudnn();
           assert0(dc::tensor::View(
-              m_activations_copyout, m_activations_d[0].get_data(0)));
+              m_activations_copyout, get_activations().LockedBuffer()));
 #if 1
           dump_tensor(m_activations_copyout,
                       get_name() + "_activations_original");
@@ -296,7 +296,7 @@ class pooling_layer : public transform_layer {
           bp_compute_cudnn();
           assert0(dc::tensor::View(
               m_error_signals_copyout,
-              m_error_signals_d[0].get_data(0)));
+              get_error_signals().LockedBuffer()));
           dump_tensor(m_error_signals_copyout, get_name() + "_error_signals_original");
         }
       } else {

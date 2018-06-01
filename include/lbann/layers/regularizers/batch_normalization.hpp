@@ -268,13 +268,9 @@ class batch_normalization : public regularizer_layer {
       if (m_distconv_enabled) {
         fp_compute_distconv();
         if (m_exit_count == 0) {
-          dump_tensor(m_activations_t,
-                      get_name() + "_activations");
+          dump_activations();
           fp_compute_gpu();
-          assert0(dc::tensor::View(
-              m_activations_copyout, m_activations_d[0].get_data(0)));
-          dump_tensor(m_activations_copyout,
-                      get_name() + "_activations_original");
+          dump_reference_activations();
         }
         return;
       }
@@ -291,15 +287,13 @@ class batch_normalization : public regularizer_layer {
       if (m_distconv_enabled) {
         bp_compute_distconv();
         if (m_exit_count == 0) {
-          dump_tensor(m_error_signals_t,
-                      get_name() + "_error_signals");
+          dump_error_signals();
           assert0(dc::tensor::View(
               m_error_signals_copyout,
-              m_error_signals_d[0].get_data(0)));
+              get_error_signals().Buffer()));
           m_error_signals_copyout.zero();
           bp_compute_gpu();
-          dump_tensor(m_error_signals_copyout,
-                      get_name() + "_error_signals_original");
+          dump_reference_error_signals();
         }
         return;
       }
@@ -767,13 +761,13 @@ class batch_normalization : public regularizer_layer {
                   get_prev_activations().Width());
 
     assert0(dc::tensor::View(
-        m_scale_t, m_weights[0]->get_values_gpu()[0]));
+        m_scale_t, get_weights()[0]->get_values().LockedBuffer()));
     assert0(dc::tensor::View(
-        m_bias_t, m_weights[1]->get_values_gpu()[0]));
+        m_bias_t, get_weights()[1]->get_values().LockedBuffer()));
     assert0(dc::tensor::View(
-        m_running_mean_t, m_weights[2]->get_values_gpu()[0]));
+        m_running_mean_t, get_weights()[2]->get_values().Buffer()));
     assert0(dc::tensor::View(
-        m_running_var_t, m_weights[3]->get_values_gpu()[0]));
+        m_running_var_t, get_weights()[3]->get_values().Buffer()));
 
     m_bn->forward(m_prev_activations_t,
                   m_mean_t,
@@ -794,46 +788,33 @@ class batch_normalization : public regularizer_layer {
 
     // Check execution mode
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
-    const int num_channels = this->m_neuron_dims[0];
+    
+    assert_always(is_training && m_use_global_stats);    
     
     assert0(dc::tensor::View(
-        m_scale_t, m_weights[0]->get_values_gpu()[0]));
-
-    assert0(dc::tensor::View(
-        m_mean_gradient_t, m_mean_gradient_d.get_data()[0]));
-
+        m_scale_t, get_weights()[0]->get_values().LockedBuffer()));
+    
     m_bn->backward_stage1(m_prev_activations_t,
                           m_prev_error_signals_t,
                           m_mean_t, m_var_t, m_scale_t,
                           m_scale_gradient_t, m_bias_gradient_t,
                           m_mean_gradient_t, m_var_gradient_t,
                           false);
-    
-    assert_always(is_training && m_use_global_stats);
-    
+        
     // Verbatim copy from bp_compute_gpu
     // Accumulate gradients
     if (is_training) {
       if (m_use_global_stats) {
-        this->m_cudnn->global_allreduce_on_gpus(m_mean_gradient_d.get_data(),
-                                                num_channels,
-                                                1,
-                                                m_mean_gradient->RedundantComm());
-        this->m_cudnn->global_allreduce_on_gpus(m_var_gradient_d.get_data(),
-                                                num_channels,
-                                                1,
-                                                m_var_gradient->RedundantComm());
-      } else {
-        this->m_cudnn->allreduce_on_gpus(m_mean_gradient_d.get_data(),
-                                         num_channels,
-                                         1);
-        this->m_cudnn->allreduce_on_gpus(m_var_gradient_d.get_data(),
-                                         num_channels,
-                                         1);
+        m_comm->allreduce(*m_mean_gradient,
+                          m_mean_gradient->RedundantComm(),
+                          El::mpi::SUM);
+        m_comm->allreduce(*m_var_gradient,
+                          m_var_gradient->RedundantComm(),
+                          El::mpi::SUM);
       }
     } else {
-      m_mean_gradient_d.zero();
-      m_var_gradient_d.zero();
+      Zero(*m_mean_gradient);
+      Zero(*m_var_gradient);
     }
 
     const int effective_mini_batch_size = this->m_model->get_effective_mini_batch_size();
@@ -841,14 +822,14 @@ class batch_normalization : public regularizer_layer {
     optimizer* scale_optimizer = m_weights[0]->get_optimizer();
     if (scale_optimizer != nullptr) {
       scale_optimizer->add_to_gradient_staging(
-        m_scale_gradient_d,
-        DataType(1) / effective_mini_batch_size);
+          *m_scale_gradient,
+          DataType(1) / effective_mini_batch_size);
     }
     optimizer* bias_optimizer = m_weights[1]->get_optimizer();
     if (bias_optimizer != nullptr) {
       bias_optimizer->add_to_gradient_staging(
-        m_bias_gradient_d,
-        DataType(1) / effective_mini_batch_size);
+          *m_bias_gradient,
+          DataType(1) / effective_mini_batch_size);
     }
 
     m_bn->backward_stage2(m_prev_activations_t,
@@ -902,44 +883,34 @@ class batch_normalization : public regularizer_layer {
     const LocaleMPI loc(m_comm->get_model_comm().comm, false);    
     // mean
     m_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_mean_t, m_mean_d.get_data()[0]));
+    assert0(dc::tensor::View(m_mean_t, this->m_mean->Buffer()));
     // var
     m_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_var_t, m_var_d.get_data()[0]));
-    // scale
+    assert0(dc::tensor::View(m_var_t, this->m_var->Buffer()));
+    // scale: view to weights[0]
     m_scale_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_scale_t, m_weights[0]->get_values_gpu()[0]));
-    // bias
+    // bias: view to weights[1]
     m_bias_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_bias_t, m_weights[1]->get_values_gpu()[0]));
-    // running_mean
+    // running_mean: view to weights[2]
     m_running_mean_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_running_mean_t, m_weights[2]->get_values_gpu()[0]));
-    // running_var
+    // running_var: view to weights[3]
     m_running_var_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
-    assert0(dc::tensor::View(
-        m_running_var_t, m_weights[3]->get_values_gpu()[0]));
     // scale_gradient
     m_scale_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
     assert0(dc::tensor::View(
-        m_scale_gradient_t, m_scale_gradient_d.get_data()[0]));
+        m_scale_gradient_t, this->m_scale_gradient->Buffer()));
     // bias_gradient
     m_bias_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
     assert0(dc::tensor::View(
-        m_bias_gradient_t, m_bias_gradient_d.get_data()[0]));
+        m_bias_gradient_t, this->m_bias_gradient->Buffer()));
     // mean_gradient
     m_mean_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
     assert0(dc::tensor::View(
-        m_mean_gradient_t, m_mean_gradient_d.get_data()[0]));
+        m_mean_gradient_t, this->m_mean_gradient->Buffer()));
     // var_gradient
     m_var_gradient_t = TensorDev(per_channel_stat_shape, loc, shared_dist);
     assert0(dc::tensor::View(
-        m_var_gradient_t, m_var_gradient_d.get_data()[0]));
+        m_var_gradient_t, this->m_var_gradient->Buffer()));
 
     // spatial decomposition requires global communication
     m_use_global_stats = true;

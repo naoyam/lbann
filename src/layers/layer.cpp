@@ -1208,9 +1208,13 @@ void Layer::early_terminate() {
   if (m_exit_count > 0) --m_exit_count;
 }
 
+bool Layer::early_terminate_last_iteration() const {
+  return m_exit_count == 0;
+}
+
 void Layer::setup_distconv() {
   m_distconv_enabled = using_distconv();
-  char *count_str = getenv("DISTCONV_EARLY_TERMINATE");
+  char *count_str = std::getenv("DISTCONV_EARLY_TERMINATE");
   if (count_str) {
     m_exit_count = atoi(count_str);
     MPIRootPrintStreamInfo()
@@ -1634,11 +1638,10 @@ void Layer::fp_setup_distconv(int mini_batch_size) {
     if (m_parent_copy_in_required) {
       // then, parent is assumed to be data parallel, so the local
       // size of the sample dimension should be equal to
-      // m_mini_batch_size_per_gpu. Note that one rank only has one
-      // GPU 
+      // the local width of previous activations.
       assert_always(
           (int)m_prev_activations_const_view.get_local_shape()[-1] ==
-          m_mini_batch_size_per_gpu);
+          get_prev_activations().LocalWidth());
     }
   } 
   m_activations_t.set_outermost_dimension(mini_batch_size);
@@ -1648,7 +1651,7 @@ void Layer::fp_setup_distconv(int mini_batch_size) {
   assert_always((int)m_activations_copyout.get_shape()[-1] ==
                 mini_batch_size);
   assert_always((int)m_activations_copyout.get_local_shape()[-1] ==
-                m_mini_batch_size_per_gpu);
+                get_activations().LocalWidth());
 
   ensure_prev_activations();
 }
@@ -1668,7 +1671,7 @@ void Layer::bp_setup_distconv(int mini_batch_size) {
     if (m_child_copy_out_required) {
       assert_always(
           (int)m_prev_error_signals_const_view.get_local_shape()[-1] ==
-          m_mini_batch_size_per_gpu);
+          get_prev_error_signals().LocalWidth());
     }
   }
   m_error_signals_t.set_outermost_dimension(mini_batch_size);
@@ -1678,7 +1681,7 @@ void Layer::bp_setup_distconv(int mini_batch_size) {
   assert_always((int)m_error_signals_copyout.get_shape()[-1] ==
                 mini_batch_size);
   assert_always((int)m_error_signals_copyout.get_local_shape()[-1] ==
-                m_mini_batch_size_per_gpu);
+                get_error_signals().LocalWidth());
 
   ensure_prev_error_signals();
 }
@@ -1692,7 +1695,7 @@ void Layer::ensure_prev_activations() {
     MPIPrintStreamDebug() << "Copying previous activations from sample decomposition\n";
     assert0(dc::tensor::View(
         m_prev_activations_const_view,
-        m_prev_activations_d[0].get_locked_data(0)));
+        get_prev_activations().LockedBuffer()));
   } else {
     assert_always(m_parent_shuffle_required);
   }
@@ -1719,9 +1722,9 @@ void Layer::ensure_prev_activations() {
 void Layer::copy_out_activations() {
   if (!m_child_copy_out_required) return;
   
-  MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";      
+  MPIPrintStreamDebug() << "Copying activations back to sample decomposition\n";
   assert0(dc::tensor::View(
-      m_activations_copyout, m_activations_d[0].get_data(0)));
+      m_activations_copyout, get_activations().Buffer()));
   TensorShuffler *shuffler = nullptr;
   if (this->m_model->get_max_mini_batch_size() ==
       this->m_model->get_current_mini_batch_size()) {
@@ -1748,10 +1751,10 @@ void Layer::ensure_prev_error_signals() {
   }
 
   if (m_child_copy_out_required) {  
-    MPIPrintStreamDebug() << "Copying previous error signals from sample decomposition\n";            
+    MPIPrintStreamDebug() << "Copying previous error signals from sample decomposition\n";
     assert0(dc::tensor::View(
         m_prev_error_signals_const_view,
-        m_prev_error_signals_d[0].get_locked_data(0)));
+        get_prev_error_signals().LockedBuffer()));
   } else {
     assert_always(m_child_shuffle_required);
   }
@@ -1760,7 +1763,7 @@ void Layer::ensure_prev_error_signals() {
       this->m_model->get_current_mini_batch_size()) {
     shuffler = m_prev_error_signals_shuffler;
   } else {
-    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());        
+    int shfl_idx = static_cast<int>(this->m_model->get_execution_mode());
     assert_always(shfl_idx >= 0 && shfl_idx < 3);
     if (m_prev_error_signals_shuffler_last_mb[shfl_idx] == nullptr) {
       m_prev_error_signals_shuffler_last_mb[shfl_idx] = new TensorShuffler(
@@ -1794,7 +1797,7 @@ void Layer::copy_out_error_signals() {
     
   MPIPrintStreamDebug() << "Copying error signals back to sample decomposition\n";
   assert0(dc::tensor::View(
-      m_error_signals_copyout, m_error_signals_d[0].get_data(0)));
+      m_error_signals_copyout, get_error_signals().Buffer()));
   TensorShuffler *shuffler = nullptr;
   if (this->m_model->get_max_mini_batch_size() ==
       this->m_model->get_current_mini_batch_size()) {
