@@ -677,6 +677,7 @@ fi
 # Temporary Distconv stuff
 ################################################################
 DISTCONV_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE/distconv
+P2P_DIR=$HOME/lbann/install/$CLUSTER/$COMPILER/$BUILD_TYPE/p2p
 
 ################################################################
 # Display parameters
@@ -819,6 +820,8 @@ CONFIGURE_COMMAND=$(cat << EOF
 -D OPENBLAS_ARCH_COMMAND=${OPENBLAS_ARCH} \
 -D LBANN_WITH_DISTCONV=${WITH_DISTCONV} \
 -D LBANN_SB_FWD_LBANN_DISTCONV_DIR=${DISTCONV_DIR} \
+-D LBANN_SB_FWD_LBANN_P2P_DIR=${P2P_DIR} \
+-D Aluminum_URL=git@github.com:ndryden/Aluminum.git \
 ${SUPERBUILD_DIR}
 EOF
 )
