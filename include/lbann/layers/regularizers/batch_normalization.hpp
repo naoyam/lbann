@@ -823,7 +823,8 @@ class batch_normalization : public regularizer_layer {
     // Check execution mode
     const bool is_training = this->m_model->get_execution_mode() == execution_mode::training;
     
-    assert_always(is_training && m_use_global_stats);    
+    //assert_always(is_training && m_use_global_stats);
+    assert_always(is_training);
     
     assert0(dc::tensor::View(
         m_scale_t, get_weights()[0]->get_values().LockedBuffer()));
@@ -876,7 +877,7 @@ class batch_normalization : public regularizer_layer {
   }
     
  protected:
-  dc::BatchNormalization<DataType> *m_bn;
+  dc::BatchNormalization *m_bn;
   dc::TensorDev m_mean_t;
   dc::TensorDev m_var_t;
   dc::TensorDev m_scale_t;
@@ -947,7 +948,7 @@ class batch_normalization : public regularizer_layer {
         m_var_gradient_t, this->m_var_gradient->Buffer()));
 
     // spatial decomposition requires global communication
-    m_use_global_stats = true;
+    // m_use_global_stats = true;
   }
 
   void setup_tensors_bwd(const std::array<dc::Dist, 4> &dists) override {
@@ -958,8 +959,9 @@ class batch_normalization : public regularizer_layer {
     setup_error_signals_tensor(dists);
     setup_error_signals_copyout_tensor(dists);
 
-    m_bn = new dc::BatchNormalization<DataType>(
-        dc::get_backend(), m_decay, m_epsilon);
+    m_bn = new dc::BatchNormalization(
+        dc::get_backend(this->get_comm()->get_model_comm().comm), m_decay, m_epsilon,
+        m_use_global_stats);
 
     dc::MPIPrintStreamDebug()
         << "BN prev_error_signals: " << m_prev_error_signals_t
