@@ -45,6 +45,10 @@
 #include "lbann/utils/cudnn.hpp"
 #endif
 
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/utils/distconv.hpp"
+#endif
+
 namespace lbann {
 
 lbann_comm* initialize(int& argc, char**& argv, int seed) {
@@ -86,10 +90,17 @@ lbann_comm* initialize(int& argc, char**& argv, int seed) {
   //or an lbann_exception thrown.
   stack_trace::set_lbann_stack_trace_world_rank(comm->get_rank_in_world());
 
+#ifdef LBANN_HAS_DISTCONV
+  dc::initialize(comm->get_model_comm().comm);
+#endif
+
   return comm;
 }
 
 void finalize(lbann_comm* comm) {
+#ifdef LBANN_HAS_DISTCONV
+  dc::finalize();
+#endif
 #ifdef LBANN_HAS_CUDNN
   cudnn::destroy();
 #endif
