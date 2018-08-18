@@ -912,7 +912,7 @@ class batch_normalization : public regularizer_layer {
         << "BN prev_activations: " << m_prev_activations_t
         << ", activations: " << m_activations_t << "\n";
 
-    const int num_channels = this->m_neuron_dims[0];
+    const int num_channels = this->get_output_dims()[0];
     dc::Array4 per_channel_stat_shape = {1, 1, num_channels, 1};
     const auto shared_dist = dc::Dist();
     const dc::LocaleMPI loc(m_comm->get_model_comm().comm, false);    
