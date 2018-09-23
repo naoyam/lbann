@@ -29,6 +29,10 @@
 #ifdef LBANN_HAS_GPU
 #include "lbann/utils/cublas.hpp"
 #endif // LBANN_HAS_GPU
+#include "lbann/models/model.hpp"
+#ifdef LBANN_HAS_DISTCONV
+#include "lbann/utils/distconv.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 namespace lbann {
 
@@ -59,7 +63,16 @@ void fp_cpu(lbann_comm& comm,
 void fp_gpu(lbann_comm& comm,
             const AbsDistMat& input,
             DataType& value,
-            Al::request& req) {
+            Al::request& req,
+            execution_mode mode) {
+#ifdef LBANN_HAS_DISTCONV  
+  if (mode == execution_mode::training &&
+      dc::skip_metrics_while_training()) {
+    value = 0;
+    comm.nb_allreduce(&value, 1, input.DistComm(), req);
+    return;
+  }
+#endif
 
   // Local matrix
   const auto& local_input = input.LockedMatrix();
@@ -148,7 +161,8 @@ void abstract_evaluation_layer::fp_compute() {
     break;
 #ifdef LBANN_HAS_GPU
   case El::Device::GPU:
-    fp_gpu(*get_comm(), get_prev_activations(), m_value, m_allreduce_req);
+    fp_gpu(*get_comm(), get_prev_activations(), m_value, m_allreduce_req,
+           get_model()->get_execution_mode());
     break;
 #endif // LBANN_HAS_GPU
   default: LBANN_ERROR("invalid device");
