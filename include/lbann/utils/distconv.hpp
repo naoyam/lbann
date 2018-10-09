@@ -107,6 +107,11 @@ bool is_profiling_enabled();
  */
 bool skip_metrics_while_training();
 
+/** Query if partial aggregation of batch normalization statistics is
+ * enabled
+ */
+bool use_partial_aggregation_in_bn();
+
 /** Get p2p handle
  */
 p2p::P2P &get_p2p();

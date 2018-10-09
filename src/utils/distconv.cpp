@@ -44,6 +44,7 @@ p2p::P2P *p2p_instance = nullptr;
 Backend *backend_instance = nullptr;
 bool opt_enable_profile = false;
 bool opt_skip_metrics_while_training = false;
+bool opt_use_partial_aggregation_in_bn = false;
 } // namespace
 
 void initialize(MPI_Comm comm) {
@@ -61,6 +62,9 @@ void initialize(MPI_Comm comm) {
   }
   if (std::getenv("DISTCONV_SKIP_METRICS_WHILE_TRAINING")) {
     opt_skip_metrics_while_training = true;
+  }
+  if (std::getenv("DISTCONV_USE_PARTIAL_AGGREGATION_IN_BN")) {
+    opt_use_partial_aggregation_in_bn = true;
   }
 }
 
@@ -81,6 +85,10 @@ bool is_profiling_enabled() {
 
 bool skip_metrics_while_training() {
   return opt_skip_metrics_while_training;
+}
+
+bool use_partial_aggregation_in_bn() {
+  return opt_use_partial_aggregation_in_bn;
 }
 
 p2p::P2P &get_p2p() {
