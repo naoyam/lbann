@@ -91,6 +91,10 @@ using BatchNormalization = ::distconv::BatchNormalization<Backend, DataType>;
 namespace tensor = ::distconv::tensor;
 namespace util = ::distconv::util;
 
+MPI_Comm get_mpi_comm_for_scattering_samples(MPI_Comm comm,
+                                             int num_active_local_ranks,
+                                             int num_local_ranks);
+
 /** Initialize Distconv
  */
 void initialize(MPI_Comm comm);
@@ -98,6 +102,13 @@ void initialize(MPI_Comm comm);
 /** Finalize Distconv
  */
 void finalize();
+
+/** Returns MPI_Comm used for distconv
+    
+    Note that training only a single model is considered. This should
+    be equal to MPI_COMM_WORLD.
+ */
+MPI_Comm get_mpi_comm();
 
 /** Query profiling
  */
