@@ -171,6 +171,8 @@ void lbann_comm::allreduce(AbsMat& m,
       t = std::type_index(typeid(::Al::MPICUDABackend));
       }*/
 #endif  // AL_HAS_MPI_CUDA
+#elif defined(AL_HAS_MPI_CUDA)
+    t = std::type_index(typeid(::Al::MPICUDABackend));
 #else
     throw lbann_exception("Allreduce on GPU matrix requires NCCL support in"
                           " Aluminum");
@@ -249,6 +251,8 @@ void lbann_comm::nb_allreduce(AbsMat& m,
       t = std::type_index(typeid(::Al::MPICUDABackend));
       }*/
 #endif  // AL_HAS_MPI_CUDA
+#elif defined(AL_HAS_MPI_CUDA)
+    t = std::type_index(typeid(::Al::MPICUDABackend));
 #else
     throw lbann_exception("Allreduce on GPU matrix requires NCCL support in"
                           " Aluminum");
