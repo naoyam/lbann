@@ -127,7 +127,7 @@ model *build_model_from_prototext(int argc, char **argv,
       procs_per_model = comm->get_procs_in_world();
     }
     if (first_model) {
-      comm->split_models(procs_per_model);
+      //comm->split_models(procs_per_model);
       if (pb_model->num_parallel_readers() > procs_per_model) {
         pb_model->set_num_parallel_readers(procs_per_model);
       }
