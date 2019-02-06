@@ -86,6 +86,7 @@ else ()
 endif ()
 
 # ... then the tag.
+<<<<<<< HEAD
 set(HYDROGEN_TAG "hydrogen"
   CACHE STRING "The git tag or hash to checkout for Hydrogen")
 
