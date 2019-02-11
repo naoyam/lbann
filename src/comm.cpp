@@ -146,6 +146,12 @@ void lbann_comm::allreduce(AbsMat& m,
     return;
   }
   const int local_size = m.Height() * m.Width();
+#ifdef LBANN_SKIP_ALLREDUCE
+  //if (am_world_master()) {
+  //std::cerr << "Skip allreduce of size " << local_size << std::endl;
+  //}
+  return;
+#else
   bytes_sent += sizeof(DataType) * local_size;
 #ifdef LBANN_HAS_ALUMINUM
   if (m.Width() > 1 && m.Height() != m.LDim()) {
@@ -217,6 +223,7 @@ void lbann_comm::allreduce(AbsMat& m,
   El::AllReduce(m, c, op);
 #endif
   bytes_received += sizeof(DataType) * local_size * (El::mpi::Size(c) - 1);
+#endif
 }
 
 void lbann_comm::allreduce(AbsDistMat& m,
@@ -232,8 +239,14 @@ void lbann_comm::nb_allreduce(AbsMat& m,
   if (El::mpi::Size(c) == 1 || m.Height() < 1 || m.Width() < 1) {
     return;
   }
-#ifdef LBANN_HAS_ALUMINUM
   const int local_size = m.Height() * m.Width();
+#ifdef LBANN_SKIP_ALLREDUCE
+  //if (am_world_master()) {
+  //std::cerr << "Skip allreduce of size " << local_size << std::endl;
+  //}
+  return;
+#else
+#ifdef LBANN_HAS_ALUMINUM
   bytes_sent += sizeof(DataType) * local_size;
   if (m.Width() > 1 && m.Height() != m.LDim()) {
     std::stringstream err;
@@ -308,6 +321,7 @@ void lbann_comm::nb_allreduce(AbsMat& m,
 #else
   allreduce(m, std::move(c), op);
 #endif // LBANN_HAS_ALUMINUM
+#endif
 }
 
 void lbann_comm::nb_allreduce(AbsDistMat& m,

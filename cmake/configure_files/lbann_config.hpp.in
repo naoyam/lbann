@@ -51,4 +51,6 @@ namespace lbann
 using DataType = @LBANN_DATATYPE@;
 }// namespace lbann
 
+#cmakedefine LBANN_SKIP_ALLREDUCE
+
 #endif /* LBANN_CONFIG_H__ */

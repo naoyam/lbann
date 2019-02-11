@@ -382,6 +382,8 @@ if (LBANN_WITH_DISTCONV)
   endif(NOT P2P_FOUND)
 endif (LBANN_WITH_DISTCONV)
 
+set(LBANN_SKIP_ALLREDUCE TRUE)
+
 # Handle the documentation
 add_subdirectory(docs)
 
