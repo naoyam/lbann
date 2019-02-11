@@ -3,7 +3,9 @@ enable_language(CXX)
 set(DISTCONV_URL ssh://git@cz-bitbucket.llnl.gov:7999/~maruyama/distconv.git
   CACHE STRING "The URL from which to clone Distconv")
 
-set(DISTCONV_TAG "master"
+set(DISTCONV_TAG
+  #"master"
+  "scaling-test"
   CACHE STRING "The git tag to checkout for Distconv")
 
 set(DISTCONV_CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}"
