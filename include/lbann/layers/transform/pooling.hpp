@@ -637,6 +637,13 @@ public:
       throw lbann_exception("pooling_layer: no DISTCONV implementation for pooling mode");
     }
 
+    std::vector<int> pool_dims = this->m_pool_dims;
+    std::reverse(pool_dims.begin(), pool_dims.end());
+    std::vector<int> pads = this->m_pads;
+    std::reverse(pads.begin(), pads.end());
+    std::vector<int> strides = this->m_strides;
+    std::reverse(strides.begin(), strides.end());
+
     dc::MPIPrintStreamDebug()
         << "Pooling (" << get_name() << "): "
         << "prev_activations_const_view: " << m_prev_activations_const_view
@@ -647,15 +654,13 @@ public:
         << ", prev_error_signals_t: " << m_prev_error_signals_t
         << ", error_signals_copyout: " << m_error_signals_copyout
         << ", error_signals_t: " << m_error_signals_t;
+
     m_pooling->setup(m_prev_activations_t,
                      m_activations_t,
                      m_error_signals_t,
                      m_prev_error_signals_t,
-                     m_pool_dims[0], m_pool_dims[1],
-                     m_pads[0], m_pads[1],
-                     m_strides[0], m_strides[1],
+                     pool_dims, pads, strides,
                      mode);
-
   }
 
  protected:
