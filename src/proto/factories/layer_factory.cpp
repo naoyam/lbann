@@ -490,6 +490,8 @@ Layer* construct_layer(lbann_comm* comm,
         aggr = batch_normalization_stats_aggregation::node_local;
       } else if (aggr_str == "global") {
         aggr = batch_normalization_stats_aggregation::global;
+      } else if (aggr_str == "spatial") {
+        aggr = batch_normalization_stats_aggregation::spatial;
       } else {
         err << "Invalid batch normalization stats aggregation " << aggr_str;
         LBANN_ERROR(err.str());
