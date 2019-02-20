@@ -135,7 +135,7 @@ void lbann_comm::intertrainer_sum_matrix(AbsDistMat& mat) {
 }
 
 void lbann_comm::allreduce(AbsMat& m,
-                           const El::mpi::Comm& c,
+                           El::mpi::Comm c,
                            El::mpi::Op op) {
   if (El::mpi::Size(c) == 1 || m.Height() < 1 || m.Width() < 1) {
     return;
@@ -182,7 +182,7 @@ void lbann_comm::allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::MPIBackend>(El::SyncInfo<El::Device::CPU>{}));
+      c.template GetComm<::Al::MPIBackend>());
   }
 #ifdef AL_HAS_NCCL
   if (t == std::type_index(typeid(::Al::NCCLBackend))) {
@@ -190,9 +190,7 @@ void lbann_comm::allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::NCCLBackend>(
-          SyncInfoFromMatrix(
-              static_cast<El::Matrix<DataType,El::Device::GPU>&>(m))));
+      c.template GetComm<::Al::NCCLBackend>());
   }
 #endif // AL_HAS_NCCL
 #ifdef AL_HAS_MPI_CUDA
@@ -202,9 +200,7 @@ void lbann_comm::allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::MPICUDABackend>(
-          SyncInfoFromMatrix(
-              static_cast<El::Matrix<DataType,El::Device::GPU>&>(m))),
+      c.template GetComm<::Al::MPICUDABackend>(),
       ::Al::MPICUDAAllreduceAlgorithm::host_transfer);
   }
 #endif  // AL_HAS_MPI_CUDA
@@ -215,13 +211,13 @@ void lbann_comm::allreduce(AbsMat& m,
 }
 
 void lbann_comm::allreduce(AbsDistMat& m,
-                           const El::mpi::Comm& c,
+                           El::mpi::Comm c,
                            El::mpi::Op op) {
   allreduce(m.Matrix(), std::move(c), op);
 }
 
 void lbann_comm::nb_allreduce(AbsMat& m,
-                              const El::mpi::Comm& c,
+                              El::mpi::Comm c,
                               Al::request& req,
                               El::mpi::Op op) {
   if (El::mpi::Size(c) == 1 || m.Height() < 1 || m.Width() < 1) {
@@ -269,7 +265,7 @@ void lbann_comm::nb_allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::MPIBackend>(El::SyncInfo<El::Device::CPU>{}),
+      c.template GetComm<::Al::MPIBackend>(),
       req.mpi_req);
   }
   /// @todo MPI-CUDA backend
@@ -279,9 +275,7 @@ void lbann_comm::nb_allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::NCCLBackend>(
-          SyncInfoFromMatrix(
-              static_cast<El::Matrix<DataType,El::Device::GPU>&>(m))),
+      c.template GetComm<::Al::NCCLBackend>(),
       req.nccl_req);
   }
 #endif // AL_HAS_NCCL
@@ -292,9 +286,7 @@ void lbann_comm::nb_allreduce(AbsMat& m,
       m.Buffer(),
       local_size,
       mpi_op_to_al_op(op),
-      c.template GetComm<::Al::MPICUDABackend>(
-          SyncInfoFromMatrix(
-              static_cast<El::Matrix<DataType,El::Device::GPU>&>(m))),
+      c.template GetComm<::Al::MPICUDABackend>(),
       req.mpicuda_req,
       ::Al::MPICUDAAllreduceAlgorithm::host_transfer);
   }
@@ -306,7 +298,7 @@ void lbann_comm::nb_allreduce(AbsMat& m,
 }
 
 void lbann_comm::nb_allreduce(AbsDistMat& m,
-                              const El::mpi::Comm& c,
+                              El::mpi::Comm c,
                               Al::request& req,
                               El::mpi::Op op) {
   nb_allreduce(m.Matrix(), std::move(c), req, op);
@@ -361,7 +353,7 @@ void lbann_comm::intertrainer_broadcast_matrix(AbsDistMat& mat, int root) {
 }
 
 template<>
-void lbann_comm::broadcast<std::string>(const int root, std::string& str, const El::mpi::Comm& c) {
+void lbann_comm::broadcast<std::string>(const int root, std::string& str, El::mpi::Comm c) {
   std::vector<char> data(str.begin(), str.end());
   broadcast(root, data, std::move(c));
   str.assign(data.begin(), data.end());
@@ -382,7 +374,7 @@ void lbann_comm::global_barrier() {
   barrier(get_world_comm());
 }
 
-void lbann_comm::barrier(const El::mpi::Comm& c) {
+void lbann_comm::barrier(const El::mpi::Comm c) {
   El::mpi::Barrier(c);
 }
 
@@ -459,7 +451,7 @@ void lbann_comm::setup_node_comm() {
   auto *node_name_list = new char[hash_comm_size*MPI_MAX_PROCESSOR_NAME];
   checkMPI(MPI_Allgather(node_name, MPI_MAX_PROCESSOR_NAME, MPI_CHAR,
                          node_name_list, MPI_MAX_PROCESSOR_NAME, MPI_CHAR,
-                         hash_comm.GetMPIComm()));
+                         hash_comm.comm));
   int node_num = El::mpi::Rank(hash_comm);
   for(int i=0; i<hash_comm_size; ++i) {
     const std::string other_node_string(node_name_list + i*MPI_MAX_PROCESSOR_NAME);
