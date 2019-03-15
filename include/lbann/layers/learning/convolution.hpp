@@ -507,9 +507,14 @@ protected:
     if (!Layer::using_distconv()) return false;
 
     bool cond = true;
+    auto kernel_dim = this->m_kernel_dims[2];
     for(int i = 0; i < dc::num_spatial_dims; i++) {
-      cond &= this->m_kernel_dims[2 + i] == this->m_kernel_dims[2];
-      cond &= this->m_kernel_dims[2 + i] == this->m_pads[i] / this->m_dilations[i] * 2 + 1;
+      auto kernel_dim_i = this->m_kernel_dims[2 + i];
+      // only symmetric filters are supported
+      cond &= kernel_dim_i == kernel_dim;
+      // padding size needs to match the halo size or 0
+      cond &= this->m_pads[i] == 0 ||
+          kernel_dim_i == this->m_pads[i] / this->m_dilations[i] * 2 + 1;
     }
     if (!cond) {
       dc::MPIPrintStreamDebug()
