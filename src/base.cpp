@@ -49,7 +49,21 @@
 #include "lbann/utils/distconv.hpp"
 #endif
 
+#include "aluminum/trace.hpp"
+
 namespace lbann {
+
+void mpi_error_handler(MPI_Comm *comm, int *err, ...) {
+  fprintf(stderr, "MPI error happened: %d\n", *err);
+  ::Al::internal::trace::write_trace_to_file();
+  MPI_Abort(MPI_COMM_WORLD, 1);
+}
+
+void set_mpi_error_handler(MPI_Comm comm) {
+  MPI_Errhandler mpi_eh;
+  MPI_Comm_create_errhandler(mpi_error_handler, &mpi_eh);
+  MPI_Comm_set_errhandler(comm, mpi_eh);
+}
 
 world_comm_ptr initialize(int& argc, char**& argv, int seed) {
   // Initialize Elemental.
@@ -57,6 +71,7 @@ world_comm_ptr initialize(int& argc, char**& argv, int seed) {
   // Create a new comm object.
   // Initial creation with every process in one model.
   MPI_Comm lbann_mpi_comm = MPI_COMM_WORLD;
+  set_mpi_error_handler(MPI_COMM_WORLD);
 #ifdef LBANN_HAS_DISTCONV
   lbann_mpi_comm = dc::get_strided_mpi_comm(MPI_COMM_WORLD);
 #endif
