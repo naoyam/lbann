@@ -169,7 +169,7 @@ std::unique_ptr<model> build_model_from_prototext(
     }
     io_thread_pool.relaunch_pinned_threads(1);
   }
-
+  
   // Get I/O thread details
   auto io_threads_per_process = io_thread_pool.get_num_threads();
 
@@ -181,7 +181,6 @@ std::unique_ptr<model> build_model_from_prototext(
     init_random(random_seed);
     init_data_seq_random(random_seed);
   }
-
   // Initialize models differently if needed.
 #ifndef LBANN_DETERMINISTIC
   if (pb_model->random_init_models_differently()) {
@@ -207,7 +206,6 @@ std::unique_ptr<model> build_model_from_prototext(
   if (opts->has_string("print_affinity")) {
     display_omp_setup();
   }
-
   // Update the index lists to accomodate multi-trainer / multi-model specification
   customize_data_readers_index_list(*comm, pb);
 
@@ -216,6 +214,7 @@ std::unique_ptr<model> build_model_from_prototext(
   std::map<execution_mode, generic_data_reader *> data_readers;
   bool is_shared_training_data_reader = pb_model->shareable_training_data_reader();
   bool is_shared_testing_data_reader = pb_model->shareable_testing_data_reader();
+  
   if (opts->has_string("share_testing_data_readers")) {
     is_shared_testing_data_reader = opts->get_bool("share_testing_data_readers");
   }
@@ -230,7 +229,6 @@ std::unique_ptr<model> build_model_from_prototext(
       }
     }
   }
-
   // User feedback
   print_parameters(*comm, pb);
 
@@ -240,7 +238,6 @@ std::unique_ptr<model> build_model_from_prototext(
                                                             pb.optimizer(),
                                                             pb.trainer(),
                                                             pb.model());
-
   // If the checkpoint directory has been overridden reset it before
   // setting up the model
   if (opts->has_string("ckpt_dir")) {
@@ -268,7 +265,6 @@ std::unique_ptr<model> build_model_from_prototext(
       }
     }
   }
-
   // Setup data readers
   for(auto&& dr: data_readers) {
     dr.second->setup(io_threads_per_process, &io_thread_pool);
@@ -277,7 +273,6 @@ std::unique_ptr<model> build_model_from_prototext(
 
   // Setup models
   ret_model->setup();
-
   if (opts->get_bool("use_data_store") || opts->get_bool("preload_data_store") || opts->get_bool("data_store_cache")) {
     if (master) {
       std::cout << "\nUSING DATA STORE!\n\n";
@@ -287,7 +282,6 @@ std::unique_ptr<model> build_model_from_prototext(
       r.second->setup_data_store(pb_model->mini_batch_size());
     }
   }
-
   // restart model from checkpoint if we have one
   //@todo
   //model->restartShared();

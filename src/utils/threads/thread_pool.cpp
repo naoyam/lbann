@@ -132,12 +132,13 @@ void thread_pool::do_thread_work_()
 void thread_pool::do_thread_work_pinned_thread_(int tid, cpu_set_t cpu_set)
 {
   // Set the CPU affinity for the thread
-  auto error = pthread_setaffinity_np(pthread_self(),
-                                      sizeof(cpu_set_t), &cpu_set);
-  if (error != 0) {
-    std::cerr << "error in pthread_setaffinity_np, error="
-              << error << std::endl;
-  }
+ // auto error = pthread_setaffinity_np(pthread_self(),
+   //                                   sizeof(cpu_set_t), &cpu_set);
+    //if (error != 0) {
+      //  std::cerr << "error in pthread_setaffinity_np, error="
+        //     << error << std::endl;
+        
+    //}
 
   {
     std::lock_guard<std::mutex> guard(m_thread_map_mutex);

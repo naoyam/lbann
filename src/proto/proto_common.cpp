@@ -97,7 +97,7 @@ void init_data_readers(
     // This is a hack that should be fixed when we clean up data reader setup.
     bool set_transform_pipeline = true;
 
-    if ((name == "mnist") || (name == "cifar10")) {
+    if ((name == "mnist") || (name == "cifar10") || (name=="par_hdf5")) {
       init_org_image_data_reader(readme, master, reader);
       set_transform_pipeline = false;
     } else if ((name == "imagenet") ||
@@ -393,7 +393,6 @@ void init_data_readers(
 
       reader->set_partitioned(readme.is_partitioned(), readme.partition_overlap(), readme.partition_mode());
     }
-
     if (readme.role() == "train") {
       reader->set_role("train");
     } else if (readme.role() == "test") {
@@ -414,10 +413,12 @@ void init_data_readers(
     reader->set_master(master);
 
     reader->load();
-
+    std::cout<<"we past load!\n"; 
     if (readme.role() == "train") {
+        std::cout<<"train \n";
       data_readers[execution_mode::training] = reader;
     } else if (readme.role() == "test") {
+        std::cout<<"test \n";
       // While the default validation_percent is 0.0, this line is added to be consistent with the case of "train"
       reader->set_validation_percent( 0. );
       data_readers[execution_mode::testing] = reader;
@@ -503,6 +504,8 @@ void init_data_readers(
         LBANN_ERROR("attempted to construct Python data reader, "
                     "but LBANN is not built with Python/C API");
 #endif // LBANN_HAS_PYTHON
+      } else if (name == "par_hdf5") {
+        reader_validation = new hdf5_reader(shuffle);
       }
 
       reader_validation->set_role("validate");

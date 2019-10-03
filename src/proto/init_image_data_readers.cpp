@@ -34,6 +34,7 @@
 #include "lbann/data_readers/data_reader_imagenet.hpp"
 #include "lbann/data_readers/data_reader_mnist.hpp"
 #include "lbann/data_readers/data_reader_multihead_siamese.hpp"
+#include "lbann/data_readers/data_reader_hdf5.hpp"
 
 #include <reader.pb.h>
 
@@ -290,6 +291,8 @@ void init_org_image_data_reader(const lbann_data::Reader& pb_readme, const bool 
   } else if (name == "cifar10") {
     reader = new cifar10_reader(shuffle);
     if (master) std::cout << "cifar10_reader is set" << std::endl;
+  } else if (name == "par_hdf5") {
+    reader = new hdf5_reader(shuffle);
   } else {
     if (master) {
       std::stringstream err;
