@@ -49,7 +49,6 @@ namespace lbann {
         /// Whether to fetch a response from the last column.
         bool m_has_responses = false;
         int m_image_depth=0; 
-        std::vector<int> m_shuffled_indices;
         std::vector<short int*> m_image_data;
     private:
         static const std::string HDF5_KEY_DATA, HDF5_KEY_LABELS, HDF5_KEY_RESPONSES;

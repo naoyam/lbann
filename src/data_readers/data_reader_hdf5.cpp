@@ -45,7 +45,6 @@ namespace lbann {
             set_defaults();
           }
     void hdf5_reader::set_linearized_image_size() {
-        std::cout<< "in set_lin yay\n";
         m_image_linearized_size = m_image_width*m_image_depth*m_image_height*m_image_num_channels;
     }
     void hdf5_reader::set_defaults() {
@@ -156,13 +155,11 @@ namespace lbann {
         const El::mpi::Comm & w_comm = l_comm->get_world_comm();
         MPI_Comm mpi_comm = w_comm.GetMPIComm();
         int nprocs;
-        MPI_Comm_size(mpi_comm, &nprocs);
-        std::cout<< "nprocs " << nprocs<< "\n"; 
+        MPI_Comm_size(mpi_comm, &nprocs); 
         if ((nprocs%4) !=0) {
             std::cerr<<"if other things have not been changed in the code this will not work for anything other than 4 procs a node \n";
         }
-        int world_rank = get_rank_in_world();
-        std::cout<<" world rank " << world_rank <<"\n"; 
+        int world_rank = get_rank_in_world(); 
         
         for(unsigned int nux =0; nux<(file_list.size()/(nprocs/4)); nux++) {
             auto file = file_list[((world_rank/4)+nux)%(file_list.size())];
@@ -198,8 +195,9 @@ namespace lbann {
             H5Fclose(h_file);
        }
         m_shuffled_indices.clear();
-        std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
         m_shuffled_indices.resize(m_image_data.size());
+        std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
+        std::cout<<"size after load " << m_shuffled_indices.size();
         double end = MPI_Wtime();
         std::cerr<< "Num Files " << file_list.size() << "\n";
         std::cerr<< "Rank " << world_rank << " \n";
