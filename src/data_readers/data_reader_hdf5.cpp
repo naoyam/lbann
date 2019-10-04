@@ -156,7 +156,8 @@ namespace lbann {
        
         std::string dirpath = get_file_dir();    
         std::vector<std::string> file_list = get_filenames(dirpath);
-        
+        //TODO add a non shuffled file_list
+	//TODO add a variable for num samples
         m_shuffled_indices.clear();
         m_shuffled_indices.resize(m_image_data.size());
         std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
@@ -169,7 +170,9 @@ namespace lbann {
     }
     bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
         prof_region_begin("fetch_datum", prof_colors[0], false);
-        //TODO duplication com
+        //TODO move this to load
+	// put com into groups based off of the number of io splits
+	// create a member variable
         double start = MPI_Wtime();
         lbann_comm* l_comm = get_comm();
         const El::mpi::Comm & w_comm = l_comm->get_world_comm();
@@ -183,75 +186,73 @@ namespace lbann {
         // for file in num files/ (num processes/number of split)
         // if we have 16 file and 4 processes and 4 splits then
         // each proc will see each file 
-        for(unsigned int nux =0; nux<(file_list.size()/(nprocs/dc::get_number_of_io_partitions())); nux++) {
+        //for(unsigned int nux =0; nux<(file_list.size()/(nprocs/dc::get_number_of_io_partitions())); nux++) {
             // math to figure out what file in the file list this proc should
             // currently be reading from
-            double start_file = MPI_Wtime();
-            auto file = file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(file_list.size())];
+        double start_file = MPI_Wtime();
+       	//TODO change this to be the member variable list
+	//TODO chage this to get_size which will return the set size of files
+	auto file = m_file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(m_file_list.size())];
             
-            hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-            H5Pset_fapl_mpio(fapl_id, mpi_comm, MPI_INFO_NULL); 
-            hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-            if (h_file < 0) {
-                throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) + 
+        hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+        H5Pset_fapl_mpio(fapl_id, mpi_comm, MPI_INFO_NULL); 
+        hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+        if (h_file < 0) {
+            throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) + 
                                     " hdf5_reader::load() - can't open file : " + file);
-            }
+        }
 
-            // load in dataset
-            hid_t h_data =  H5Dopen(h_file, HDF5_KEY_DATA.c_str(), H5P_DEFAULT);
-            hid_t filespace = H5Dget_space(h_data);
-            int rank1 = H5Sget_simple_extent_ndims(filespace);
-            hsize_t dims[rank1];
-            H5Sget_simple_extent_dims(filespace, dims, NULL);
+        // load in dataset
+        hid_t h_data =  H5Dopen(h_file, HDF5_KEY_DATA.c_str(), H5P_DEFAULT);
+        hid_t filespace = H5Dget_space(h_data);
+        int rank1 = H5Sget_simple_extent_ndims(filespace);
+        hsize_t dims[rank1];
+        H5Sget_simple_extent_dims(filespace, dims, NULL);
             
-            if (h_data < 0) {
-                throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) +
+        if (h_data < 0) {
+            throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) +
                                         " hdf5_reader::load() - can't find hdf5 key : " + HDF5_KEY_DATA);
-            } 
-            
-            read_hdf5(h_data, filespace, world_rank, HDF5_KEY_DATA, dims);
-            //close data set
-            H5Dclose(h_data);
-            if (m_has_responses) {
-                double all_responses[4];
-                // dont need these in the comments unless 
-                // not going to read in all responses at a time
-                //unsure it needs to be an array
-                //hsize_t dim_response[1];
-                //dims[0] = 4;
-                h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
-                H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, all_responses);
-                m_response_data.push_back(&(*all_responses));
-                H5Dclose(h_data);
-            }
-            H5Fclose(h_file);
-            double end_file= MPI_Wtime();
-            std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
-       }
+        }
 
-        double end = MPI_Wtime();
-        std::cerr<< "Num Files " << file_list.size() << "\n";
-        std::cerr<< "Rank " << world_rank << " \n";
-        std::cerr<< "The process took " << end - start << " seconds to run. \n";
-	//this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
-        unsigned long int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
         short int*& tmp = m_image_data[data_id];
-        //TODO: I believe this can be parallelized
         //TODO: add the int 16 stuff
-        Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(mb_idx, mb_idx+1));
+	//TODO: change the indexing 
+	// check if mb_idx needs to be changed to not be hard coded
+	int adj_mb_idx = mb_idx+(rank%4);
+        Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(adj_mb_idx, adj_mb_idx+1));
 
         DataType *dest = X_v.Buffer();
-   #ifdef LBANN_DISTCONV_COSMOFLOW_KEEP_INT16
-        std::memcpy(dest,data, sizeof(short)*pixelcount);
-   #else
-        LBANN_OMP_PARALLEL_FOR
-            for(int p = 0; p<pixelcount; p++) {
+        //TODO Add a reference to X mat so only one read
+	//will this work ? ?
+        read_hdf5(h_data, filespace, world_rank, HDF5_KEY_DATA, dims, dest);
+        //close data set
+        H5Dclose(h_data);
+        if (m_has_responses) {
+            //TODO: move this to be a memeber variable act as a cache so we only have to open the file once
+            h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
+            H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
+            H5Dclose(h_data);
+        }
+        H5Fclose(h_file);
+        double end_file= MPI_Wtime();
+        std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
+       }
+
+        //TODO do i need this?
+	// not if I pass a ref to X I dont think
+	//this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
+        //unsigned long int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
+  // #ifdef LBANN_DISTCONV_COSMOFLOW_KEEP_INT16
+    //    std::memcpy(dest,data, sizeof(short)*pixelcount);
+  // #else
+    //    LBANN_OMP_PARALLEL_FOR
+     //       for(int p = 0; p<pixelcount; p++) {
                 //TODO what is m_scaling_factor_int16
-                dest[p] = tmp[p] * m_scaling_factor_int16;
+     //           dest[p] = tmp[p] * m_scaling_factor_int16;
                 // mash this with above
                     //X.Set(p, mb_idx,*tmp++);
-            }
-   #endif
+     //       }
+  // #endif
         //auto pixel_col = X(El::IR(0, X.Height()), El::IR(mb_idx, mb_idx+1));
         //std::vector<size_t> dims = {
           //  1ull,
@@ -264,10 +265,9 @@ namespace lbann {
     //get from a cached response
     bool hdf5_reader::fetch_response(Mat& Y, int data_id, int mb_idx) {
         prof_region_begin("fetch_response", prof_colors[0], false);
-        double *& responses = m_response_data[data_id];
         Mat Y_v = El::View(Y, El::IR(0, Y.Height()), El::IR(mb_idx, mb_idx+1));
         //TODO: possibly 4 tho, python tells me its float64
-        std::memcpy(Y_v.Buffer(), responses,
+        std::memcpy(Y_v.Buffer(), &m_all_responses,
             m_num_responses_features*8);
         prof_region_end("fetch_response", false);
         return true;
