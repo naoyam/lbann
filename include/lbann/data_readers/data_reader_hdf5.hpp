@@ -22,7 +22,7 @@ namespace lbann {
     /**
      * Data reader for data stored in hdf5 files will need to assume the file contains x
      */
-    class hdf5_reader : public image_data_reader {
+    class hdf5_reader : public generic_data_reader {
     public:
         hdf5_reader(const bool shuffle);
         hdf5_reader* copy() const override { return new hdf5_reader(*this); }
@@ -32,11 +32,6 @@ namespace lbann {
         }
         //void set_input_params(int width, int height, int depth, int num_ch, int num_labels);
         void load() override;
-        /// Set whether to fetch labels
-        void set_has_labels(bool b)  {m_has_labels = b; }
-        void set_has_responses(bool b) { m_has_responses = b; }
-        void set_linearized_image_size();
-        void set_defaults() override;
 
     protected:
         void read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims);

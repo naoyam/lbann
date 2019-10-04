@@ -45,21 +45,8 @@ namespace lbann {
     const std::string hdf5_reader::HDF5_KEY_RESPONSES = "redshifts";
 
     hdf5_reader::hdf5_reader(const bool shuffle)
-        : image_data_reader(shuffle) {
-            set_defaults();
+        : generic_data_reader(shuffle) {
           }
-    void hdf5_reader::set_linearized_image_size() {
-        m_image_linearized_size = m_image_width*m_image_depth*m_image_height*m_image_num_channels;
-    }
-    //This is currently hardcoded for splits
-    // change here if we are doing differently that x and y splits
-    void hdf5_reader::set_defaults() {
-        m_image_width = 512;
-        m_image_height = 512;
-        m_image_depth = 512/dc::get_number_of_io_partitions();
-        m_image_num_channels = 4;
-        set_linearized_image_size();
-    }
     // helper function, couldnt find this in the std lib
     bool file_ends_with(const std::string &mainStr, const std::string &toMatch)
     {
@@ -98,7 +85,7 @@ namespace lbann {
         int yPerNode = dims[1]/ylines;
         int zPerNode = dims[2]/zlines;
         int cPerNode = dims[3]/channellines;
-       
+       	//TODO: change this to be allocated elsewhere
         short int data_out[xPerNode*yPerNode*zPerNode*cPerNode]; 
         hsize_t dims_local[4];
         hsize_t offset[4];
@@ -161,7 +148,7 @@ namespace lbann {
         //todo add error checking
         H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count, dims_local);
         H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, H5P_DEFAULT, data_out);
-        
+        //TODO change this 
         m_image_data.push_back(&(*data_out));
     }
 
@@ -245,7 +232,7 @@ namespace lbann {
     bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
         prof_region_begin("fetch_datum", prof_colors[0], false);
         //this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
-        int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
+        unsigned long int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
         short int*& tmp = m_image_data[data_id];
         //TODO: I believe this can be parallelized
         //TODO: add the int 16 stuff
