@@ -157,6 +157,19 @@ namespace lbann {
         std::string dirpath = get_file_dir();    
         std::vector<std::string> file_list = get_filenames(dirpath);
         
+        m_shuffled_indices.clear();
+        m_shuffled_indices.resize(m_image_data.size());
+        std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
+        std::cout<<"size after load " << m_shuffled_indices.size();
+        
+        select_subset_of_data();
+    }
+    bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
+        return true;
+    }
+    bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
+        prof_region_begin("fetch_datum", prof_colors[0], false);
+        //TODO duplication com
         double start = MPI_Wtime();
         lbann_comm* l_comm = get_comm();
         const El::mpi::Comm & w_comm = l_comm->get_world_comm();
@@ -215,23 +228,12 @@ namespace lbann {
             double end_file= MPI_Wtime();
             std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
        }
-        m_shuffled_indices.clear();
-        m_shuffled_indices.resize(m_image_data.size());
-        std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
-        std::cout<<"size after load " << m_shuffled_indices.size();
+
         double end = MPI_Wtime();
         std::cerr<< "Num Files " << file_list.size() << "\n";
         std::cerr<< "Rank " << world_rank << " \n";
         std::cerr<< "The process took " << end - start << " seconds to run. \n";
-        
-        select_subset_of_data();
-    }
-    bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
-        return true;
-    }
-    bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
-        prof_region_begin("fetch_datum", prof_colors[0], false);
-        //this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
+	//this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
         unsigned long int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
         short int*& tmp = m_image_data[data_id];
         //TODO: I believe this can be parallelized
@@ -259,6 +261,7 @@ namespace lbann {
         prof_region_end("fetch_datum", false);
         return true;
     }
+    //get from a cached response
     bool hdf5_reader::fetch_response(Mat& Y, int data_id, int mb_idx) {
         prof_region_begin("fetch_response", prof_colors[0], false);
         double *& responses = m_response_data[data_id];
