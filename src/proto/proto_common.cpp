@@ -413,7 +413,7 @@ void init_data_readers(
     reader->set_master(master);
 
     reader->load();
-    std::cout<<"we past load!\n"; 
+     
     if (readme.role() == "train") {
         std::cout<<"train \n";
       data_readers[execution_mode::training] = reader;

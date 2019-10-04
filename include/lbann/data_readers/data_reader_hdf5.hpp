@@ -47,9 +47,12 @@ namespace lbann {
         /// Whether to fetch a label from the last column.
         bool m_has_labels = false;
         /// Whether to fetch a response from the last column.
-        bool m_has_responses = false;
+        bool m_has_responses = true;
         int m_image_depth=0; 
+        int m_num_responses_features =4;
+        DataType m_scaling_factor_int16 = 1.0;
         std::vector<short int*> m_image_data;
+        std::vector<double*> m_response_data;
     private:
         static const std::string HDF5_KEY_DATA, HDF5_KEY_LABELS, HDF5_KEY_RESPONSES;
     };

@@ -23,10 +23,14 @@
 //// implied. See the License for the specific language governing
 //// permissions and limitations under the license.
 ////
-//// data_reader_numpy_npz .hpp .cpp - generic_data_reader class for numpy .npz dataset
 //////////////////////////////////////////////////////////////////////////////////
+//TODO:
+//write it so it takes in the appropriate number of directories
+//adjust load so that it loads in a label
+//use the right tag for that label
 //
 #include "lbann/data_readers/data_reader_hdf5.hpp"
+#include "lbann/utils/profiling.hpp"
 #include <cstdio>
 #include <string>
 #include <fstream>
@@ -34,11 +38,11 @@
 #include <iostream>
 #include "dirent.h"
 #include <cstring>
-
+#include "lbann/utils/distconv.hpp"
 namespace lbann {
     const std::string hdf5_reader::HDF5_KEY_DATA = "full";
     const std::string hdf5_reader::HDF5_KEY_LABELS = "labels";
-    const std::string hdf5_reader::HDF5_KEY_RESPONSES = "responses";
+    const std::string hdf5_reader::HDF5_KEY_RESPONSES = "redshifts";
 
     hdf5_reader::hdf5_reader(const bool shuffle)
         : image_data_reader(shuffle) {
@@ -47,10 +51,12 @@ namespace lbann {
     void hdf5_reader::set_linearized_image_size() {
         m_image_linearized_size = m_image_width*m_image_depth*m_image_height*m_image_num_channels;
     }
+    //This is currently hardcoded for splits
+    // change here if we are doing differently that x and y splits
     void hdf5_reader::set_defaults() {
-        m_image_width = 512/2;
-        m_image_height = 512/2;
-        m_image_depth = 512;
+        m_image_width = 512;
+        m_image_height = 512;
+        m_image_depth = 512/dc::get_number_of_io_partitions();
         m_image_num_channels = 4;
         set_linearized_image_size();
     }
@@ -80,10 +86,11 @@ namespace lbann {
     }
 
     void hdf5_reader::read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims) {
-        // this is the splits, right now it is hard coded to split along the y and x
-        int ylines = 2;
-        int xlines = 2;
-        int zlines = 1;
+        // this is the splits, right now it is hard coded to split along the z axis
+        int num_io_parts = dc::get_number_of_io_partitions();
+        int ylines = 1;
+        int xlines = 1;
+        int zlines = num_io_parts;
         int channellines = 1;
 
         // todo: when taking care of the odd case this cant be an int
@@ -96,42 +103,55 @@ namespace lbann {
         hsize_t dims_local[4];
         hsize_t offset[4];
         hsize_t count[4];
+        // local dimensions aka the dimensions of the slab we will read in
         dims_local[0] = xPerNode;
         dims_local[1] = yPerNode;
         dims_local[2] = zPerNode;
         dims_local[3] = cPerNode;
+        // necessary for the hdf5 lib
         hid_t memspace = H5Screate_simple(4, dims_local, NULL);
-
+        int odd_offset;
         if (xlines > 1) {
             // this is theoretically the odd case but it has not been tested yet
-            if((rank%4) < int(dims[0]%xPerNode)) {
-                offset[0] = ((xPerNode+1)*(rank%2));
-                xPerNode++;
+            // so everything with odd should be ignored
+            if((rank%num_io_parts) < int(dims[0]%xPerNode)) {
+                offset[0] = ((xPerNode+1)*(rank%num_io_parts));
             } else {
-                offset[0] = ((xPerNode+1)*(dims[0]%xPerNode))+(xPerNode*(((rank%4)-(dims[0]%xPerNode))%xlines)); 
+                // offset of this x dim for this rank;
+                // in most cases odd_offset will be 0
+                odd_offset = (xPerNode+1)*(dims[0]%xPerNode);
+                offset[0] = odd_offset +(xPerNode*((rank%num_io_parts)%xlines)); 
             }
         } else {
            offset[0] = 0;
         }
         
         if (ylines > 1) {
-            if((rank%4) < int(dims[1]%yPerNode)) {
-                offset[1] = ((yPerNode+1)*(rank%2));
-                yPerNode++;
-             } else {    
-                offset[1] = ((yPerNode+1)*(dims[1]%yPerNode)) + (yPerNode*(((rank%4)-(dims[1]%yPerNode))/ylines));                                                   }   
+            if((rank%num_io_parts) < int(dims[1]%yPerNode)) {
+                offset[1] = ((yPerNode+1)*(rank%num_io_parts));
+             } else {
+                // offset of the y dim for this rank
+                odd_offset = (yPerNode+1)*(dims[1]%yPerNode);
+                offset[1] = odd_offset + (yPerNode*((rank%num_io_parts)/ylines));
+             }   
         } else {
             offset[1] = 0;
         }
 
+        if (zlines > 1) {
+            offset[2] = zPerNode*(rank%num_io_parts);
+        } else {
+            offset[2] = 0;
+        }
+        // I have channel dim splits 
+        // all combos arent really tested
         //add the rest later
-        offset[2] = 0;
         offset[3] = 0; 
         count[0] = 1;
         count[1] = 1;
         count[2] = 1;
         count[3] = 1;
-        //std::cout<< " offset " <<offset[0] <<" " << offset[1] << " " << offset[2] << " " <<offset[3] << "\n";
+        // from an explanation of the hdf5 select_hyperslab:
         // start -> a starting location for the hyperslab
         // stride -> the number of elements to separate each element or block to be selected
         // count -> the number of elemenets or blocks to select along each dimension
@@ -156,13 +176,19 @@ namespace lbann {
         MPI_Comm mpi_comm = w_comm.GetMPIComm();
         int nprocs;
         MPI_Comm_size(mpi_comm, &nprocs); 
-        if ((nprocs%4) !=0) {
+        if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
             std::cerr<<"if other things have not been changed in the code this will not work for anything other than 4 procs a node \n";
         }
         int world_rank = get_rank_in_world(); 
-        
-        for(unsigned int nux =0; nux<(file_list.size()/(nprocs/4)); nux++) {
-            auto file = file_list[((world_rank/4)+nux)%(file_list.size())];
+        // for file in num files/ (num processes/number of split)
+        // if we have 16 file and 4 processes and 4 splits then
+        // each proc will see each file 
+        for(unsigned int nux =0; nux<(file_list.size()/(nprocs/dc::get_number_of_io_partitions())); nux++) {
+            // math to figure out what file in the file list this proc should
+            // currently be reading from
+            double start_file = MPI_Wtime();
+            auto file = file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(file_list.size())];
+            
             hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
             H5Pset_fapl_mpio(fapl_id, mpi_comm, MPI_INFO_NULL); 
             hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -170,12 +196,6 @@ namespace lbann {
                 throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) + 
                                     " hdf5_reader::load() - can't open file : " + file);
             }
-     
-            //std::vector<std::tuple<const bool, const std::string, hid_t &>> hdf5LoadList;
-            // in other readers:
-            // m_image_data[0] is label
-            // m_image_data[1] is image
-            // might want to change the structure once I know what the labels are
 
             // load in dataset
             hid_t h_data =  H5Dopen(h_file, HDF5_KEY_DATA.c_str(), H5P_DEFAULT);
@@ -190,9 +210,23 @@ namespace lbann {
             } 
             
             read_hdf5(h_data, filespace, world_rank, HDF5_KEY_DATA, dims);
-            
+            //close data set
             H5Dclose(h_data);
+            if (m_has_responses) {
+                double all_responses[4];
+                // dont need these in the comments unless 
+                // not going to read in all responses at a time
+                //unsure it needs to be an array
+                //hsize_t dim_response[1];
+                //dims[0] = 4;
+                h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
+                H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, all_responses);
+                m_response_data.push_back(&(*all_responses));
+                H5Dclose(h_data);
+            }
             H5Fclose(h_file);
+            double end_file= MPI_Wtime();
+            std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
        }
         m_shuffled_indices.clear();
         m_shuffled_indices.resize(m_image_data.size());
@@ -202,27 +236,50 @@ namespace lbann {
         std::cerr<< "Num Files " << file_list.size() << "\n";
         std::cerr<< "Rank " << world_rank << " \n";
         std::cerr<< "The process took " << end - start << " seconds to run. \n";
-
-
+        
+        select_subset_of_data();
     }
     bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
         return true;
     }
     bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
-        int pixelcount = m_image_width*m_image_height*m_image_depth;
+        prof_region_begin("fetch_datum", prof_colors[0], false);
+        //this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS
+        int pixelcount = m_image_width*m_image_height*m_image_depth*m_image_num_channels;
         short int*& tmp = m_image_data[data_id];
-        for(int p = 0; p<pixelcount; p++) {
-            X.Set(p, mb_idx,*tmp++);
-        }
-        auto pixel_col = X(El::IR(0, X.Height()), El::IR(mb_idx, mb_idx+1));
-        std::vector<size_t> dims = {
-            1ull,
-            static_cast<size_t>(m_image_height),
-            static_cast<size_t>(m_image_width)};
-        m_transform_pipeline.apply(pixel_col, dims);
+        //TODO: I believe this can be parallelized
+        //TODO: add the int 16 stuff
+        Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(mb_idx, mb_idx+1));
+
+        DataType *dest = X_v.Buffer();
+   #ifdef LBANN_DISTCONV_COSMOFLOW_KEEP_INT16
+        std::memcpy(dest,data, sizeof(short)*pixelcount);
+   #else
+        LBANN_OMP_PARALLEL_FOR
+            for(int p = 0; p<pixelcount; p++) {
+                //TODO what is m_scaling_factor_int16
+                dest[p] = tmp[p] * m_scaling_factor_int16;
+                // mash this with above
+                    //X.Set(p, mb_idx,*tmp++);
+            }
+   #endif
+        //auto pixel_col = X(El::IR(0, X.Height()), El::IR(mb_idx, mb_idx+1));
+        //std::vector<size_t> dims = {
+          //  1ull,
+          //  static_cast<size_t>(m_image_height),
+          //  static_cast<size_t>(m_image_width)};
+        //m_transform_pipeline.apply(pixel_col, dims);
+        prof_region_end("fetch_datum", false);
         return true;
     }
     bool hdf5_reader::fetch_response(Mat& Y, int data_id, int mb_idx) {
+        prof_region_begin("fetch_response", prof_colors[0], false);
+        double *& responses = m_response_data[data_id];
+        Mat Y_v = El::View(Y, El::IR(0, Y.Height()), El::IR(mb_idx, mb_idx+1));
+        //TODO: possibly 4 tho, python tells me its float64
+        std::memcpy(Y_v.Buffer(), responses,
+            m_num_responses_features*8);
+        prof_region_end("fetch_response", false);
         return true;
     } 
     
