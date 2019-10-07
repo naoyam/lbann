@@ -41,7 +41,6 @@
 #include "lbann/utils/distconv.hpp"
 namespace lbann {
     const std::string hdf5_reader::HDF5_KEY_DATA = "full";
-    const std::string hdf5_reader::HDF5_KEY_LABELS = "labels";
     const std::string hdf5_reader::HDF5_KEY_RESPONSES = "redshifts";
 
     hdf5_reader::hdf5_reader(const bool shuffle)
