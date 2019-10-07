@@ -44,32 +44,7 @@ namespace lbann {
     const std::string hdf5_reader::HDF5_KEY_RESPONSES = "redshifts";
 
     hdf5_reader::hdf5_reader(const bool shuffle)
-        : generic_data_reader(shuffle) {
-          }
-    // helper function, couldnt find this in the std lib
-   // bool file_ends_with(const std::string &mainStr, const std::string &toMatch)
-   // {
-   //     return (mainStr.size() >= toMatch.size() &&
-   //             mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0);
-   // }
-    // collect all files names in a directory, ignore all files that don't end in .hdf5
-    // this should possibly be changes to "or .h5" as I think that is a valid ending to hdf5 files
-    //std::vector<std::string> get_filenames(std::string dir_path) {
-    //    std::vector<std::string> file_names;
-    //    DIR *dir = opendir(dir_path.c_str());
-    //   struct dirent *entry;
-    //    std::string file_ending = ".hdf5";
-    //    while ((entry = readdir(dir)) != NULL) {
-    //        std::string temp_path = dir_path;
-    //        std::string entry_name = entry->d_name;
-
-    //        if(file_ends_with(entry_name, file_ending)) {
-    //            file_names.push_back(temp_path.append(entry_name));                                                 
-    //        }
-    //    }
-    //    closedir(dir);
-    //    return file_names;
-    //}
+        : generic_data_reader(shuffle) {}
 
     void hdf5_reader::read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, DataType * data_out) {
         // this is the splits, right now it is hard coded to split along the z axis
@@ -171,31 +146,18 @@ namespace lbann {
     }
     bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
         prof_region_begin("fetch_datum", prof_colors[0], false);
-        //TODO move this to load
-	// put com into groups based off of the number of io splits
-	// create a member variable
-        double start = MPI_Wtime();
-        lbann_comm* l_comm = get_comm();
-        const El::mpi::Comm & w_comm = l_comm->get_world_comm();
-        MPI_Comm mpi_comm = w_comm.GetMPIComm();
         int nprocs;
-        MPI_Comm_size(mpi_comm, &nprocs); 
+        MPI_Comm_size(MPI_COMM_WORLD, &nprocs); 
         if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
             std::cerr<<"if other things have not been changed in the code this will not work for anything other than 4 procs a node \n";
         }
-        int world_rank = get_rank_in_world(); 
-        // for file in num files/ (num processes/number of split)
-        // if we have 16 file and 4 processes and 4 splits then
-        // each proc will see each file 
-        //for(unsigned int nux =0; nux<(file_list.size()/(nprocs/dc::get_number_of_io_partitions())); nux++) {
-            // math to figure out what file in the file list this proc should
-            // currently be reading from
+        int world_rank = get_rank_in_world();
         double start_file = MPI_Wtime();
         //TODO: do I need this mod --> will world rank/paritions ever be greater than the number of files??
 	    auto file = m_file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(m_file_list.size())];
             
         hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-        H5Pset_fapl_mpio(fapl_id, mpi_comm, MPI_INFO_NULL); 
+        H5Pset_fapl_mpio(fapl_id, m_comm, MPI_INFO_NULL); 
         hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
         if (h_file < 0) {
             throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) + 
@@ -214,21 +176,19 @@ namespace lbann {
                                         " hdf5_reader::load() - can't find hdf5 key : " + HDF5_KEY_DATA);
         }
 
-        short int*& tmp = m_image_data[data_id];
         //TODO: add the int 16 stuff
-	//TODO: change the indexing 
-	// check if mb_idx needs to be changed to not be hard coded
-	int adj_mb_idx = mb_idx+(rank%4);
+	    //TODO: change the indexing 
+	    // check if mb_idx needs to be changed to not be hard coded
+	    int adj_mb_idx = mb_idx+(rank%4);
         Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(adj_mb_idx, adj_mb_idx+1));
 
         DataType *dest = X_v.Buffer();
         //TODO Add a reference to X mat so only one read
-	//will this work ? ?
+	    //will this work ? ?
         read_hdf5(h_data, filespace, world_rank, HDF5_KEY_DATA, dims, dest);
         //close data set
         H5Dclose(h_data);
         if (m_has_responses) {
-            //TODO: move this to be a memeber variable act as a cache so we only have to open the file once
             h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
             H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
             H5Dclose(h_data);
