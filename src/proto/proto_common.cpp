@@ -225,7 +225,7 @@ void init_data_readers(
       auto* reader_cosmo_hdf5 = new hdf5_reader(shuffle);
       auto filedir = readme.data_filedir();
       if(!endsWith(filedir, "/")) {
-        filedir = filedir + "/"
+        filedir = filedir + "/";
       } 
       const auto paths = glob(filedir +readme.data_file_pattern());
       reader_cosmo_hdf5->set_hdf5_paths(paths);
@@ -514,8 +514,6 @@ void init_data_readers(
         LBANN_ERROR("attempted to construct Python data reader, "
                     "but LBANN is not built with Python/C API");
 #endif // LBANN_HAS_PYTHON
-      } else if (name == "par_hdf5") {
-        reader_validation = new hdf5_reader(shuffle);
       }
 
       reader_validation->set_role("validate");

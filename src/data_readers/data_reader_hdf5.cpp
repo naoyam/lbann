@@ -59,8 +59,7 @@ namespace lbann {
         int yPerNode = dims[1]/ylines;
         int zPerNode = dims[2]/zlines;
         int cPerNode = dims[3]/channellines;
-       	//TODO: change this to be allocated elsewhere
-        short int data_out[xPerNode*yPerNode*zPerNode*cPerNode]; 
+       	 
         hsize_t dims_local[4];
         hsize_t offset[4];
         hsize_t count[4];
@@ -125,14 +124,11 @@ namespace lbann {
     }
 
     void hdf5_reader::load() {
-       
-        std::string dirpath = get_file_dir();    
-        std::vector<std::string> file_list = get_filenames(dirpath);
         lbann_comm* l_comm = get_comm();
         const El::mpi::Comm & w_comm = l_comm->get_world_comm();
         MPI_Comm mpi_comm = w_comm.GetMPIComm();
         int world_rank = get_rank_in_world();
-        int color = world_rank/dc::get_number_of_io_paritions(); 
+        int color = world_rank/dc::get_number_of_io_partitions(); 
         MPI_Comm_split(mpi_comm, color, world_rank, &m_comm);
         m_shuffled_indices.clear();
         m_shuffled_indices.resize(m_file_paths.size());
@@ -153,8 +149,8 @@ namespace lbann {
         }
         int world_rank = get_rank_in_world();
         double start_file = MPI_Wtime();
-        //TODO: do I need this mod --> will world rank/paritions ever be greater than the number of files??
-	    auto file = m_file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(m_file_list.size())];
+        //TODO: does this need to be divided by the num procs
+	    auto file = m_file_paths[data_id/dc::get_number_of_io_partitions()];
             
         hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
         H5Pset_fapl_mpio(fapl_id, m_comm, MPI_INFO_NULL); 
@@ -179,7 +175,7 @@ namespace lbann {
         //TODO: add the int 16 stuff
 	    //TODO: change the indexing 
 	    // check if mb_idx needs to be changed to not be hard coded
-	    int adj_mb_idx = mb_idx+(rank%4);
+	    int adj_mb_idx = mb_idx+(world_rank%dc::get_number_of_io_partitions());
         Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(adj_mb_idx, adj_mb_idx+1));
 
         DataType *dest = X_v.Buffer();
@@ -196,7 +192,6 @@ namespace lbann {
         H5Fclose(h_file);
         double end_file= MPI_Wtime();
         std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
-       }
 
         //TODO do i need this?
 	// not if I pass a ref to X I dont think

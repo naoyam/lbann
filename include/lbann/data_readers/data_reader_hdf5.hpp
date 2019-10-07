@@ -33,8 +33,9 @@ namespace lbann {
         //void set_input_params(int width, int height, int depth, int num_ch, int num_labels);
         void load() override;
         void set_hdf5_paths(const std::vector<std::string> hdf5_paths) {m_file_paths = hdf5_paths;}
+        void set_scaling_factor_int16(DataType s) {m_scaling_factor_int16 = s;}
     protected:
-        void read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims);
+        void read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, DataType * data_out);
         //void set_defaults() override;
         bool fetch_datum(CPUMat& X, int data_id, int mb_idx) override;
         bool fetch_label(CPUMat& Y, int data_id, int mb_idx) override;
@@ -45,9 +46,10 @@ namespace lbann {
         bool m_has_responses = true;
         int m_image_depth=0; 
         int m_num_responses_features =4;
+        float m_all_responses[4];
         DataType m_scaling_factor_int16 = 1.0;
         std::vector<std::string> m_file_paths;
-        MPI_comm m_comm;
+        MPI_Comm m_comm;
     private:
         static const std::string HDF5_KEY_DATA, HDF5_KEY_LABELS, HDF5_KEY_RESPONSES;
     };
