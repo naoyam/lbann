@@ -97,7 +97,7 @@ void init_data_readers(
     // This is a hack that should be fixed when we clean up data reader setup.
     bool set_transform_pipeline = true;
 
-    if ((name == "mnist") || (name == "cifar10") || (name=="par_hdf5")) {
+    if ((name == "mnist") || (name == "cifar10")) {
       init_org_image_data_reader(readme, master, reader);
       set_transform_pipeline = false;
     } else if ((name == "imagenet") ||
@@ -221,6 +221,16 @@ void init_data_readers(
       reader_cosmoflow->set_npz_paths(paths);
       reader_cosmoflow->set_scaling_factor_int16(readme.scaling_factor_int16());
       reader = reader_cosmoflow;
+    } else if (name=="cosmoflow_hdf5") {
+      auto* reader_cosmo_hdf5 = new hdf5_reader(shuffle);
+      auto filedir = readme.data_filedir();
+      if(!endsWith(filedir, "/")) {
+        filedir = filedir + "/"
+      } 
+      const auto paths = glob(filedir +readme.data_file_pattern());
+      reader_cosmo_hdf5->set_hdf5_paths(paths);
+      reader_cosmo_hdf5->set_scaling_factor_int16(readme.scaling_factor_int16());
+      reader = reader_cosmo_hdf5; 
     } else if (name == "pilot2_molecular_reader") {
       pilot2_molecular_reader* reader_pilot2_molecular = new pilot2_molecular_reader(readme.num_neighbors(), readme.max_neighborhood(), shuffle);
       reader = reader_pilot2_molecular;

@@ -47,31 +47,31 @@ namespace lbann {
         : generic_data_reader(shuffle) {
           }
     // helper function, couldnt find this in the std lib
-    bool file_ends_with(const std::string &mainStr, const std::string &toMatch)
-    {
-        return (mainStr.size() >= toMatch.size() &&
-                mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0);
-    }
+   // bool file_ends_with(const std::string &mainStr, const std::string &toMatch)
+   // {
+   //     return (mainStr.size() >= toMatch.size() &&
+   //             mainStr.compare(mainStr.size() - toMatch.size(), toMatch.size(), toMatch) == 0);
+   // }
     // collect all files names in a directory, ignore all files that don't end in .hdf5
     // this should possibly be changes to "or .h5" as I think that is a valid ending to hdf5 files
-    std::vector<std::string> get_filenames(std::string dir_path) {
-        std::vector<std::string> file_names;
-        DIR *dir = opendir(dir_path.c_str());
-        struct dirent *entry;
-        std::string file_ending = ".hdf5";
-        while ((entry = readdir(dir)) != NULL) {
-            std::string temp_path = dir_path;
-            std::string entry_name = entry->d_name;
+    //std::vector<std::string> get_filenames(std::string dir_path) {
+    //    std::vector<std::string> file_names;
+    //    DIR *dir = opendir(dir_path.c_str());
+    //   struct dirent *entry;
+    //    std::string file_ending = ".hdf5";
+    //    while ((entry = readdir(dir)) != NULL) {
+    //        std::string temp_path = dir_path;
+    //        std::string entry_name = entry->d_name;
 
-            if(file_ends_with(entry_name, file_ending)) {
-                file_names.push_back(temp_path.append(entry_name));                                                 
-            }
-        }
-        closedir(dir);
-        return file_names;
-    }
+    //        if(file_ends_with(entry_name, file_ending)) {
+    //            file_names.push_back(temp_path.append(entry_name));                                                 
+    //        }
+    //    }
+    //    closedir(dir);
+    //    return file_names;
+    //}
 
-    void hdf5_reader::read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims) {
+    void hdf5_reader::read_hdf5(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, DataType * data_out) {
         // this is the splits, right now it is hard coded to split along the z axis
         int num_io_parts = dc::get_number_of_io_partitions();
         int ylines = 1;
@@ -147,18 +147,20 @@ namespace lbann {
         //todo add error checking
         H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count, dims_local);
         H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, H5P_DEFAULT, data_out);
-        //TODO change this 
-        m_image_data.push_back(&(*data_out));
     }
 
     void hdf5_reader::load() {
        
         std::string dirpath = get_file_dir();    
         std::vector<std::string> file_list = get_filenames(dirpath);
-        //TODO add a non shuffled file_list
-	//TODO add a variable for num samples
+        lbann_comm* l_comm = get_comm();
+        const El::mpi::Comm & w_comm = l_comm->get_world_comm();
+        MPI_Comm mpi_comm = w_comm.GetMPIComm();
+        int world_rank = get_rank_in_world();
+        int color = world_rank/dc::get_number_of_io_paritions(); 
+        MPI_Comm_split(mpi_comm, color, world_rank, &m_comm);
         m_shuffled_indices.clear();
-        m_shuffled_indices.resize(m_image_data.size());
+        m_shuffled_indices.resize(m_file_paths.size());
         std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
         std::cout<<"size after load " << m_shuffled_indices.size();
         
@@ -189,9 +191,8 @@ namespace lbann {
             // math to figure out what file in the file list this proc should
             // currently be reading from
         double start_file = MPI_Wtime();
-       	//TODO change this to be the member variable list
-	//TODO chage this to get_size which will return the set size of files
-	auto file = m_file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(m_file_list.size())];
+        //TODO: do I need this mod --> will world rank/paritions ever be greater than the number of files??
+	    auto file = m_file_list[((world_rank/dc::get_number_of_io_partitions())+nux)%(m_file_list.size())];
             
         hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
         H5Pset_fapl_mpio(fapl_id, mpi_comm, MPI_INFO_NULL); 
