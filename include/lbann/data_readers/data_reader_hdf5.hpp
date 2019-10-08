@@ -46,7 +46,7 @@ namespace lbann {
         bool m_has_responses = true;
         int m_image_depth=0; 
         int m_num_responses_features =4;
-        float m_all_responses[4];
+        double m_all_responses[4];
         DataType m_scaling_factor_int16 = 1.0;
         std::vector<std::string> m_file_paths;
         MPI_Comm m_comm;
