@@ -291,8 +291,6 @@ void init_org_image_data_reader(const lbann_data::Reader& pb_readme, const bool 
   } else if (name == "cifar10") {
     reader = new cifar10_reader(shuffle);
     if (master) std::cout << "cifar10_reader is set" << std::endl;
-  } else if (name == "par_hdf5") {
-    reader = new hdf5_reader(shuffle);
   } else {
     if (master) {
       std::stringstream err;

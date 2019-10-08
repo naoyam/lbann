@@ -23,12 +23,7 @@
 //// implied. See the License for the specific language governing
 //// permissions and limitations under the license.
 ////
-//////////////////////////////////////////////////////////////////////////////////
-//TODO:
-//write it so it takes in the appropriate number of directories
-//adjust load so that it loads in a label
-//use the right tag for that label
-//
+///////////////////////////////////////////////////////////////////////////////////
 #include "lbann/data_readers/data_reader_hdf5.hpp"
 #include "lbann/utils/profiling.hpp"
 #include <cstdio>
@@ -150,7 +145,7 @@ namespace lbann {
         int world_rank = get_rank_in_world();
         double start_file = MPI_Wtime();
         //TODO: does this need to be divided by the num procs
-	    auto file = m_file_paths[data_id/dc::get_number_of_io_partitions()];
+	    auto file = m_file_paths[data_id];
             
         hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
         H5Pset_fapl_mpio(fapl_id, m_comm, MPI_INFO_NULL); 
@@ -173,10 +168,9 @@ namespace lbann {
         }
 
         //TODO: add the int 16 stuff
-	    //TODO: change the indexing 
 	    // check if mb_idx needs to be changed to not be hard coded
-	    int adj_mb_idx = mb_idx+(world_rank%dc::get_number_of_io_partitions());
-        Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(adj_mb_idx, adj_mb_idx+1));
+	    //int adj_mb_idx = mb_idx+(world_rank%dc::get_number_of_io_partitions());
+        Mat X_v = El::View(X, El::IR(0,X.Height()), El::IR(mb_idx, adj_mb_idx+1));
 
         DataType *dest = X_v.Buffer();
         //TODO Add a reference to X mat so only one read
@@ -186,7 +180,11 @@ namespace lbann {
         H5Dclose(h_data);
         if (m_has_responses) {
             h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
-            H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
+            double responses[4];
+	    H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, responses);
+	    for (int i = 0; i < 4; ++i) {
+	    	m_all_responses[i] = static_cast<float>(responses[i]);
+	    }
             H5Dclose(h_data);
         }
         H5Fclose(h_file);
@@ -223,7 +221,7 @@ namespace lbann {
         Mat Y_v = El::View(Y, El::IR(0, Y.Height()), El::IR(mb_idx, mb_idx+1));
         //TODO: possibly 4 tho, python tells me its float64
         std::memcpy(Y_v.Buffer(), &m_all_responses,
-            m_num_responses_features*8);
+            m_num_responses_features*4);
         prof_region_end("fetch_response", false);
         return true;
     } 
