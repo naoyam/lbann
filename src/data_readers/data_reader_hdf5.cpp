@@ -101,10 +101,6 @@ namespace lbann {
     // all combos arent really tested
     //add the rest later
     offset[3] = 0; 
-    count[0] = 1;
-    count[1] = 1;
-    count[2] = 1;
-    count[3] = 1;
     // from an explanation of the hdf5 select_hyperslab:
     // start -> a starting location for the hyperslab
     // stride -> the number of elements to separate each element or block to be selected
@@ -222,7 +218,7 @@ namespace lbann {
     Mat Y_v = El::View(Y, El::IR(0, Y.Height()), El::IR(mb_idx, mb_idx+1));
     //TODO: possibly 4 tho, python tells me its float64
     std::memcpy(Y_v.Buffer(), &m_all_responses,
-        m_num_responses_features*4);
+       m_num_responses_features*4);
     prof_region_end("fetch_response", false);
     return true;
   } 
