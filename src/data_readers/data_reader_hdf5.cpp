@@ -101,8 +101,7 @@ namespace lbann {
   bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
     prof_region_begin("fetch_datum", prof_colors[0], false); 
     int world_rank = get_rank_in_world();
-    double start_file = MPI_Wtime();
-    
+
     auto file = m_file_paths[data_id];
 
     hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
@@ -145,7 +144,6 @@ namespace lbann {
       H5Dclose(h_data);
     }
     H5Fclose(h_file);
-    double end_file= MPI_Wtime();
   
     //TODO do i need this?
     // not if I pass a ref to X I dont think
