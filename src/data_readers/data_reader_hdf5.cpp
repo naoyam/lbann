@@ -31,12 +31,11 @@
 #include <fstream>
 #include <unordered_set>
 #include <iostream>
-#include "dirent.h"
 #include <cstring>
 #include "lbann/utils/distconv.hpp"
 namespace lbann {
   const std::string hdf5_reader::HDF5_KEY_DATA = "full";
-  const std::string hdf5_reader::HDF5_KEY_RESPONSES = "redshifts";
+  const std::string hdf5_reader::HDF5_KEY_RESPONSES = "physPar";
 
   hdf5_reader::hdf5_reader(const bool shuffle)
     : generic_data_reader(shuffle) {}
@@ -50,57 +49,23 @@ namespace lbann {
     int channellines = 1;
 
     // todo: when taking care of the odd case this cant be an int
-    int xPerNode = dims[0]/xlines;
-    int yPerNode = dims[1]/ylines;
-    int zPerNode = dims[2]/zlines;
-    int cPerNode = dims[3]/channellines;
+    int xPerNode = dims[3]/xlines;
+    int yPerNode = dims[2]/ylines;
+    int zPerNode = dims[1]/zlines;
+    int cPerNode = dims[0]/channellines;
     // offset in each dimension
     hsize_t offset[4];
     // how many times the pattern should repeat in the hyperslab
     hsize_t count[4] = {1,1,1,1};
     // local dimensions aka the dimensions of the slab we will read in
-    hsize_t dims_local[4] = {xPerNode, yPerNode, zPerNode, cPerNode};
+    hsize_t dims_local[4] = {cPerNode, zPerNode, yPerNode, xPerNode};
 
     // necessary for the hdf5 lib
     hid_t memspace = H5Screate_simple(4, dims_local, NULL);
-    int odd_offset;
     int spatial_offset = rank%num_io_parts
-    if (xlines > 1) {
-      // this is theoretically the odd case but it has not been tested yet
-      // so everything with odd should be ignored
-      if(spatial_offset < int(dims[0]%xPerNode)) {
-        offset[0] = ((xPerNode+1)*spatial_offset);
-      } else {
-        // offset of this x dim for this rank;
-        // in most cases odd_offset will be 0
-        odd_offset = (xPerNode+1)*(dims[0]%xPerNode);
-        offset[0] = odd_offset +(xPerNode*(spatial_offset%xlines)); 
-      }
-    } else {
-      offset[0] = 0;
-    }
 
-    if (ylines > 1) {
-      if(spatial_offset < int(dims[1]%yPerNode)) {
-        offset[1] = ((yPerNode+1)*spatial_offset);
-      } else {
-        // offset of the y dim for this rank
-        odd_offset = (yPerNode+1)*(dims[1]%yPerNode);
-        offset[1] = odd_offset + (yPerNode*(spatial_offset/ylines));
-      }   
-    } else {
-      offset[1] = 0;
-    }
-
-    if (zlines > 1) {
-      offset[2] = zPerNode*spatial_offset;
-    } else {
-      offset[2] = 0;
-    }
-    // I have channel dim splits 
-    // all combos arent really tested
-    //add the rest later
-    offset[3] = 0; 
+    hsize_t offset[4] = {0, zPerNode*spatial_offset, 0, 0};
+    
     // from an explanation of the hdf5 select_hyperslab:
     // start -> a starting location for the hyperslab
     // stride -> the number of elements to separate each element or block to be selected
@@ -123,19 +88,18 @@ namespace lbann {
     m_shuffled_indices.clear();
     m_shuffled_indices.resize(m_file_paths.size());
     std::iota(m_shuffled_indices.begin(), m_shuffled_indices.end(), 0);
-
+    int nprocs;
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+    if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
+      std::cerr<<"nprocs should be divisible by num of io partitions otherwise this wont work \n";
+    }
     select_subset_of_data();
   }
   bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
     return true;
   }
   bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
-    prof_region_begin("fetch_datum", prof_colors[0], false);
-    int nprocs;
-    MPI_Comm_size(MPI_COMM_WORLD, &nprocs); 
-    if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
-      std::cerr<<"nprocs should be divisible by num of io partitions otherwise this wont work \n";
-    }
+    prof_region_begin("fetch_datum", prof_colors[0], false); 
     int world_rank = get_rank_in_world();
     double start_file = MPI_Wtime();
     
@@ -177,17 +141,12 @@ namespace lbann {
     H5Dclose(h_data);
     if (m_has_responses) {
       h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
-      double responses[4];
-      H5Dread(h_data, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, responses);
-      for (int i = 0; i < 4; ++i) {
-        m_all_responses[i] = static_cast<float>(responses[i]);
-      }
+      H5Dread(h_data, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
       H5Dclose(h_data);
     }
     H5Fclose(h_file);
     double end_file= MPI_Wtime();
-    std::cerr<<"per file time " << end_file -start_file << "seconds to run. \n";
-
+  
     //TODO do i need this?
     // not if I pass a ref to X I dont think
     //this should be equal to num_nuerons/LBANN_NUM_IO_PARTITIONS

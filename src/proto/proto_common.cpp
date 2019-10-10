@@ -425,10 +425,8 @@ void init_data_readers(
     reader->load();
      
     if (readme.role() == "train") {
-        std::cout<<"train \n";
       data_readers[execution_mode::training] = reader;
     } else if (readme.role() == "test") {
-        std::cout<<"test \n";
       // While the default validation_percent is 0.0, this line is added to be consistent with the case of "train"
       reader->set_validation_percent( 0. );
       data_readers[execution_mode::testing] = reader;

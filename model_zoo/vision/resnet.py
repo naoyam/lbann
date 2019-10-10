@@ -13,7 +13,7 @@ import lbann.contrib.models.wide_resnet
 model_zoo_dir = dirname(dirname(abspath(__file__)))
 data_reader_prototext = join(model_zoo_dir,
                              'data_readers',
-                             'data_reader_hdf5.prototext')
+                             'data_reader_imagenet.prototext')
 
 # Command-line arguments
 desc = ('Construct and run ResNet on ImageNet-1K data. '
@@ -179,6 +179,7 @@ data_reader_proto = data_reader_proto.data_reader
 
 # Setup trainer
 trainer = lbann.Trainer()
+
 # Save prototext
 if args.prototext:
     lbann.proto.save_prototext(args.prototext,
@@ -193,9 +194,12 @@ if not args.prototext:
     kwargs = lbann.contrib.args.get_scheduler_kwargs(args)
     classes = args.num_labels
     kwargs['lbann_args'] = (
-        '--data_filedir_train=/p/gpfs1/brainusr/datasets/cosmoflow/cosmoUniverse_2019_05_4parE/hdf5/21688988/ --data_filename_train=no'
-        '--data_filedir_test=/p/gpfs1/brainusr/datasets/cosmoflow/cosmoUniverse_2019_05_4parE/hdf5/21688988/ --data_filename_test=no'
-        )
+        '--data_filedir_train={} --data_filename_train={} '
+        '--data_filedir_test={} --data_filename_test={}'
+        .format(imagenet_dir(data_set='train', num_classes=classes),
+                imagenet_labels(data_set='train', num_classes=classes),
+                imagenet_dir(data_set='val', num_classes=classes),
+                imagenet_labels(data_set='val', num_classes=classes)))
     lbann.contrib.lc.launcher.run(trainer, model, data_reader_proto, opt,
                                   job_name='lbann_resnet',
                                   **kwargs)
