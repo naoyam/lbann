@@ -403,6 +403,7 @@ void init_data_readers(
 
       reader->set_partitioned(readme.is_partitioned(), readme.partition_overlap(), readme.partition_mode());
     }
+
     if (readme.role() == "train") {
       reader->set_role("train");
     } else if (readme.role() == "test") {
@@ -423,7 +424,7 @@ void init_data_readers(
     reader->set_master(master);
 
     reader->load();
-     
+
     if (readme.role() == "train") {
       data_readers[execution_mode::training] = reader;
     } else if (readme.role() == "test") {
