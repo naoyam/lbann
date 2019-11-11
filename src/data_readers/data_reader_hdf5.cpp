@@ -54,7 +54,11 @@ const std::string hdf5_reader::HDF5_KEY_DATA = "full";
 const std::string hdf5_reader::HDF5_KEY_RESPONSES = "unitPar";
 
 hdf5_reader::hdf5_reader(const bool shuffle)
-    : generic_data_reader(shuffle) {}
+    : generic_data_reader(shuffle) {
+#ifndef LBANN_DISTCONV_COSMOFLOW_KEEP_INT16
+  LBANN_ERROR("HDF5 reader requires LBANN_DISTCONV_COSMOFLOW_KEEP_INT16 to be defined. Use the --distconv-cosmoflow-int16 option of build_lbann_lc.sh");
+#endif
+}
 
 hdf5_reader::hdf5_reader(const hdf5_reader& rhs)  : generic_data_reader(rhs) {
   copy_members(rhs);
@@ -196,7 +200,24 @@ void hdf5_reader::load() {
   if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
     std::cerr<<"nprocs should be divisible by num of io partitions otherwise this wont work \n";
   }
-  m_data_dims = {4, 512, 512, 512};
+
+  // Read the dimension size of the first sample,
+  // assuming that all of the samples have the same dimension size
+  if(m_file_paths.size() > 0) {
+    const hid_t h_file = CHECK_HDF5(H5Fopen(m_file_paths[0].c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
+    const hid_t h_data = CHECK_HDF5(H5Dopen(h_file, HDF5_KEY_DATA.c_str(), H5P_DEFAULT));
+    const hid_t h_space = CHECK_HDF5(H5Dget_space(h_data));
+    if(CHECK_HDF5(H5Sget_simple_extent_ndims(h_space)) != 4) {
+      LBANN_ERROR("The number of dimensions of HDF5 data samples should be 4");
+    }
+    hsize_t dims[4];
+    CHECK_HDF5(H5Sget_simple_extent_dims(h_space, dims, NULL));
+    CHECK_HDF5(H5Dclose(h_data));
+    m_data_dims = std::vector<int>(dims, dims+4);
+  } else {
+    LBANN_ERROR("The number of HDF5 samples should not be zero");
+  }
+
   m_num_features = std::accumulate(m_data_dims.begin(),
                                    m_data_dims.end(),
                                    (size_t) 1,
@@ -250,9 +271,8 @@ bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
   // In the Cosmoflow case, each minibatch should have only one
   // sample per rank.
   assert_eq(X.Width(), 1);
-  // Assuming 512^3 samples
   assert_eq(X.Height(),
-            512 * 512 * 512 * 4 / dc::get_number_of_io_partitions()
+            m_num_features / dc::get_number_of_io_partitions()
             / (sizeof(DataType) / sizeof(short)));
 
   // Create a node to hold all of the data
@@ -346,4 +366,4 @@ void hdf5_reader::gather_responses(float *responses) {
   std::memcpy(responses, recv_buf, sizeof(float) * m_num_response_features);
 }
 
-}
+} // namespace lbann
