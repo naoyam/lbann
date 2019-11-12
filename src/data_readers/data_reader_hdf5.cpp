@@ -87,10 +87,9 @@ void hdf5_reader::copy_members(const hdf5_reader &rhs) {
   m_data_dims = rhs.m_data_dims;
   m_comm = rhs.m_comm;
   m_data_dims = rhs.m_data_dims;
-  m_scaling_factor_int16 = rhs.m_scaling_factor_int16;
   m_file_paths = rhs.m_file_paths;
 
-  for(size_t i = 0; i < 4 /*rhs.m_all_responses.size()*/; i++) {
+  for(size_t i = 0; i < m_num_response_features; i++) {
     m_all_responses[i] = rhs.m_all_responses[i];
   }
 }
@@ -136,7 +135,7 @@ void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace, int ran
 }
 
 void hdf5_reader::read_hdf5_sample(int data_id, conduit::Node& sample) {
-  int world_rank = dc::get_input_rank(*get_comm()); // Should probably be trainer rank
+  int world_rank = dc::get_input_rank(*get_comm());
   auto file = m_file_paths[data_id];
   hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, m_fapl);
 
@@ -225,7 +224,7 @@ void hdf5_reader::load() {
 
 #define DATA_READER_HDF5_USE_MPI_IO
 #ifdef DATA_READER_HDF5_USE_MPI_IO
-  std::cout << "data_reader_hdf5 is compiled with MPI-IO enabled" << std::endl;
+  dc::MPIRootPrintStreamDebug() << "data_reader_hdf5 is compiled with MPI-IO enabled";
   m_fapl = H5Pcreate(H5P_FILE_ACCESS);
   CHECK_HDF5(H5Pset_fapl_mpio(m_fapl, m_comm, MPI_INFO_NULL));
   m_dxpl = H5Pcreate(H5P_DATASET_XFER);
@@ -257,7 +256,6 @@ void hdf5_reader::load() {
   instantiate_data_store(local_list_sizes);
 
   select_subset_of_data();
-
   if (dc::get_rank_stride() == 1) {
     MPI_Comm_dup(dc::get_mpi_comm(), &m_response_gather_comm);
   }
@@ -306,7 +304,7 @@ bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
 //get from a cached response
 bool hdf5_reader::fetch_response(Mat& Y, int data_id, int mb_idx) {
   prof_region_begin("fetch_response", prof_colors[0], false);
-  assert_eq(Y.Height(), 4);
+  assert_eq(Y.Height(), m_num_response_features);
   float *buf;
   // Create a node to hold all of the data
   conduit::Node node;

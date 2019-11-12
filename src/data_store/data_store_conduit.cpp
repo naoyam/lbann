@@ -57,10 +57,10 @@ data_store_conduit::data_store_conduit(
 
   m_world_master = m_comm->am_world_master();
   m_trainer_master = m_comm->am_trainer_master();
-  m_rank_in_trainer = (m_comm->get_rank_in_trainer());
+  m_rank_in_trainer = m_comm->get_rank_in_trainer();
   m_partition_in_trainer = m_rank_in_trainer/num_io_parts; // needs a better name  which group you are in
   m_offset_in_partition = m_rank_in_trainer%num_io_parts;
-  m_np_in_trainer = (m_comm->get_procs_per_trainer());
+  m_np_in_trainer = m_comm->get_procs_per_trainer();
   m_num_partitions_in_trainer = m_np_in_trainer/num_io_parts; // rename this m_num_io_groups_in_trainer
 
   options *opts = options::get();
