@@ -96,10 +96,8 @@ void hdf5_reader::copy_members(const hdf5_reader &rhs) {
   }
 }
 
-//void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, conduit::Node& sample) {
 void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace,
-                                      int rank,
-                                      short *sample) {
+                                      int rank, short *sample) {
   prof_region_begin("read_hdf5_hyperslab", prof_colors[0], false);
   // this is the splits, right now it is hard coded to split along the z axis
   int num_io_parts = dc::get_number_of_io_partitions();
@@ -119,28 +117,17 @@ void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace,
   // block -> the size of the block selected from the dataspace
   //hsize_t status;
 
-  //todo add error checking
-  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count,
-                      m_hyperslab_dims.data());
+  CHECK_HDF5(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count,
+                                 m_hyperslab_dims.data()));
 
-  H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, m_dxpl, sample);
+  CHECK_HDF5(H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, m_dxpl, sample));
   prof_region_end("read_hdf5_hyperslab", false);
 }
 
 void hdf5_reader::read_hdf5_sample(int data_id, short *sample) {
   int world_rank = dc::get_input_rank(*get_comm());
   auto file = m_file_paths[data_id];
-  hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, m_fapl);
-
-#if 0
-  dc::MPIPrintStreamInfo() << "HDF5 file opened: "
-                           << file;
-#endif
-
-  if (h_file < 0) {
-    throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) +
-                          " hdf5_reader::load() - can't open file : " + file);
-  }
+  hid_t h_file = CHECK_HDF5(H5Fopen(file.c_str(), H5F_ACC_RDONLY, m_fapl));
 
   // load in dataset
   hid_t h_data = CHECK_HDF5(
@@ -152,21 +139,16 @@ void hdf5_reader::read_hdf5_sample(int data_id, short *sample) {
   // read in what the dimensions are
   CHECK_HDF5(H5Sget_simple_extent_dims(filespace, dims, NULL));
 
-  if (h_data < 0) {
-    throw lbann_exception(std::string{} + __FILE__ + " " + std::to_string(__LINE__) +
-                          " hdf5_reader::load() - can't find hdf5 key : " + HDF5_KEY_DATA);
-  }
-
   read_hdf5_hyperslab(h_data, filespace, world_rank, sample);
   //close data set
-  H5Dclose(h_data);
+  CHECK_HDF5(H5Dclose(h_data));
 
   if (m_has_responses) {
-    h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
-    H5Dread(h_data, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
-    H5Dclose(h_data);
+    h_data = CHECK_HDF5(H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT));
+    CHECK_HDF5(H5Dread(h_data, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses));
+    CHECK_HDF5(H5Dclose(h_data));
   }
-  H5Fclose(h_file);
+  CHECK_HDF5(H5Fclose(h_file));
   return;
 }
 
@@ -185,16 +167,16 @@ void hdf5_reader::load() {
   int nprocs;
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
   if ((nprocs%dc::get_number_of_io_partitions()) !=0) {
-    std::cerr<<"nprocs should be divisible by num of io partitions otherwise this wont work \n";
+    LBANN_ERROR("nprocs should be divisible by num of io partitions otherwise this wont work");
   }
 
   // Read the dimension size of the first sample,
   // assuming that all of the samples have the same dimension size
-  if(m_file_paths.size() > 0) {
+  if (m_file_paths.size() > 0) {
     const hid_t h_file = CHECK_HDF5(H5Fopen(m_file_paths[0].c_str(), H5F_ACC_RDONLY, H5P_DEFAULT));
     const hid_t h_data = CHECK_HDF5(H5Dopen(h_file, HDF5_KEY_DATA.c_str(), H5P_DEFAULT));
     const hid_t h_space = CHECK_HDF5(H5Dget_space(h_data));
-    if(CHECK_HDF5(H5Sget_simple_extent_ndims(h_space)) != 4) {
+    if (CHECK_HDF5(H5Sget_simple_extent_ndims(h_space)) != 4) {
       LBANN_ERROR("The number of dimensions of HDF5 data samples should be 4");
     }
     hsize_t dims[4];
@@ -220,9 +202,9 @@ void hdf5_reader::load() {
 #define DATA_READER_HDF5_USE_MPI_IO
 #ifdef DATA_READER_HDF5_USE_MPI_IO
   dc::MPIRootPrintStreamDebug() << "data_reader_hdf5 is compiled with MPI-IO enabled";
-  m_fapl = H5Pcreate(H5P_FILE_ACCESS);
+  m_fapl = CHECK_HDF5(H5Pcreate(H5P_FILE_ACCESS));
   CHECK_HDF5(H5Pset_fapl_mpio(m_fapl, m_comm, MPI_INFO_NULL));
-  m_dxpl = H5Pcreate(H5P_DATASET_XFER);
+  m_dxpl = CHECK_HDF5(H5Pcreate(H5P_DATASET_XFER));
   CHECK_HDF5(H5Pset_dxpl_mpio(m_dxpl, H5FD_MPIO_INDEPENDENT));  // H5FD_MPIO_COLLECTIVE
 #else
   m_fapl = H5P_DEFAULT;
@@ -257,6 +239,7 @@ void hdf5_reader::load() {
     MPI_Comm_dup(dc::get_mpi_comm(), &m_response_gather_comm);
   }
 }
+
 bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
   return true;
 }
