@@ -54,7 +54,8 @@ const std::string hdf5_reader::HDF5_KEY_DATA = "full";
 const std::string hdf5_reader::HDF5_KEY_RESPONSES = "unitPar";
 
 hdf5_reader::hdf5_reader(const bool shuffle)
-    : generic_data_reader(shuffle) {
+    : generic_data_reader(shuffle),
+      m_use_data_store(options::get()->get_bool("use_data_store")) {
 #ifndef LBANN_DISTCONV_COSMOFLOW_KEEP_INT16
   LBANN_ERROR("HDF5 reader requires LBANN_DISTCONV_COSMOFLOW_KEEP_INT16 to be defined. Use the --distconv-cosmoflow-int16 option of build_lbann_lc.sh");
 #endif
@@ -85,38 +86,31 @@ void hdf5_reader::copy_members(const hdf5_reader &rhs) {
   m_has_responses = rhs.m_has_responses;
   m_num_features = rhs.m_num_features;
   m_data_dims = rhs.m_data_dims;
+  m_hyperslab_dims = rhs.m_hyperslab_dims;
   m_comm = rhs.m_comm;
-  m_data_dims = rhs.m_data_dims;
   m_file_paths = rhs.m_file_paths;
+  m_use_data_store = rhs.m_use_data_store;
 
   for(size_t i = 0; i < m_num_response_features; i++) {
     m_all_responses[i] = rhs.m_all_responses[i];
   }
 }
 
-void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, conduit::Node& sample) {
+//void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace, int rank, std::string key, hsize_t* dims, conduit::Node& sample) {
+void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace,
+                                      int rank,
+                                      short *sample) {
   prof_region_begin("read_hdf5_hyperslab", prof_colors[0], false);
   // this is the splits, right now it is hard coded to split along the z axis
   int num_io_parts = dc::get_number_of_io_partitions();
-  int ylines = 1;
-  int xlines = 1;
-  int zlines = num_io_parts;
-  int channellines = 1;
 
-  hsize_t xPerNode = dims[3]/xlines;
-  hsize_t yPerNode = dims[2]/ylines;
-  hsize_t zPerNode = dims[1]/zlines;
-  hsize_t cPerNode = dims[0]/channellines;
   // how many times the pattern should repeat in the hyperslab
   hsize_t count[4] = {1,1,1,1};
-  // local dimensions aka the dimensions of the slab we will read in
-  hsize_t dims_local[4] = {cPerNode, zPerNode, yPerNode, xPerNode};
 
   // necessary for the hdf5 lib
-  hid_t memspace = H5Screate_simple(4, dims_local, NULL);
-  int spatial_offset = rank%num_io_parts;
-
-  hsize_t offset[4] = {0, zPerNode*spatial_offset, 0, 0};
+  hid_t memspace = H5Screate_simple(4, m_hyperslab_dims.data(), NULL);
+  int spatial_offset = rank % num_io_parts;
+  hsize_t offset[4] = {0, m_hyperslab_dims[1] * spatial_offset, 0, 0};
 
   // from an explanation of the hdf5 select_hyperslab:
   // start -> a starting location for the hyperslab
@@ -126,15 +120,14 @@ void hdf5_reader::read_hdf5_hyperslab(hsize_t h_data, hsize_t filespace, int ran
   //hsize_t status;
 
   //todo add error checking
-  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count, dims_local);
-  sample.set(conduit::DataType::uint16(xPerNode * yPerNode * zPerNode * cPerNode));
+  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, offset, NULL, count,
+                      m_hyperslab_dims.data());
 
-  unsigned short* buf = sample.value();
-  H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, m_dxpl, buf);
+  H5Dread(h_data, H5T_NATIVE_SHORT, memspace, filespace, m_dxpl, sample);
   prof_region_end("read_hdf5_hyperslab", false);
 }
 
-void hdf5_reader::read_hdf5_sample(int data_id, conduit::Node& sample) {
+void hdf5_reader::read_hdf5_sample(int data_id, short *sample) {
   int world_rank = dc::get_input_rank(*get_comm());
   auto file = m_file_paths[data_id];
   hid_t h_file = H5Fopen(file.c_str(), H5F_ACC_RDONLY, m_fapl);
@@ -164,18 +157,13 @@ void hdf5_reader::read_hdf5_sample(int data_id, conduit::Node& sample) {
                           " hdf5_reader::load() - can't find hdf5 key : " + HDF5_KEY_DATA);
   }
 
-  const std::string conduit_obj = LBANN_DATA_ID_STR(data_id);
-  read_hdf5_hyperslab(h_data, filespace, world_rank, HDF5_KEY_DATA, dims, sample[conduit_obj+"/slab"]);
+  read_hdf5_hyperslab(h_data, filespace, world_rank, sample);
   //close data set
   H5Dclose(h_data);
 
   if (m_has_responses) {
     h_data = H5Dopen(h_file, HDF5_KEY_RESPONSES.c_str(), H5P_DEFAULT);
     H5Dread(h_data, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, m_all_responses);
-    // conduit::Node work;
-    // conduit::relay::io::hdf5_read(h_data, HDF5_KEY_RESPONSES.c_str(), work);
-    //      node[conduit_obj+"/responses"].set(conduit::DataType::c_float(4));
-    sample[conduit_obj+"/responses"].set(m_all_responses, 4);
     H5Dclose(h_data);
   }
   H5Fclose(h_file);
@@ -222,6 +210,13 @@ void hdf5_reader::load() {
                                    (size_t) 1,
                                    std::multiplies<size_t>());
 
+
+  for (auto i: m_data_dims) {
+    m_hyperslab_dims.push_back(i);
+  }
+  // Partition the z dimension
+  m_hyperslab_dims[1] /= dc::get_number_of_io_partitions();
+
 #define DATA_READER_HDF5_USE_MPI_IO
 #ifdef DATA_READER_HDF5_USE_MPI_IO
   dc::MPIRootPrintStreamDebug() << "data_reader_hdf5 is compiled with MPI-IO enabled";
@@ -253,7 +248,9 @@ void hdf5_reader::load() {
     }
 #endif
   }
-  instantiate_data_store(local_list_sizes);
+  if (m_use_data_store) {
+    instantiate_data_store(local_list_sizes);
+  }
 
   select_subset_of_data();
   if (dc::get_rank_stride() == 1) {
@@ -263,6 +260,7 @@ void hdf5_reader::load() {
 bool hdf5_reader::fetch_label(Mat& Y, int data_id, int mb_idx) {
   return true;
 }
+
 bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
   prof_region_begin("fetch_datum", prof_colors[0], false);
 
@@ -273,6 +271,17 @@ bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
             m_num_features / dc::get_number_of_io_partitions()
             / (sizeof(DataType) / sizeof(short)));
 
+  if (m_use_data_store) {
+    fetch_datum_conduit(X, data_id);
+  } else {
+    read_hdf5_sample(data_id, (short*)X.Buffer());
+  }
+  prof_region_end("fetch_datum", false);
+  return true;
+}
+
+void hdf5_reader::fetch_datum_conduit(Mat& X, int data_id) {
+  const std::string conduit_key = LBANN_DATA_ID_STR(data_id);
   // Create a node to hold all of the data
   conduit::Node node;
   if (data_store_active()) {
@@ -281,34 +290,34 @@ bool hdf5_reader::fetch_datum(Mat& X, int data_id, int mb_idx) {
     node.set_external(ds_node);
     prof_region_end("get_conduit_node", false);
   }else {
-    read_hdf5_sample(data_id, node);
+    auto &conduit_obj = node[conduit_key + "/slab"];
+    conduit_obj.set(conduit::DataType::int16(
+        m_num_features / dc::get_number_of_io_partitions()));
+    short *sample_buf = conduit_obj.value();
+    read_hdf5_sample(data_id, sample_buf);
+    node[conduit_key + "/responses"].set(m_all_responses, 4);
     if (priming_data_store()) {
       // Once the node has been populated save it in the data store
       m_data_store->set_conduit_node(data_id, node);
     }
   }
-  const std::string conduit_obj = LBANN_DATA_ID_STR(data_id);
-  prof_region_begin("node[conduit_obj]", prof_colors[0], false);
+  prof_region_begin("set_external", prof_colors[0], false);
   conduit::Node slab;
-  slab.set_external(node[conduit_obj+"/slab"]);
-  prof_region_end("node[conduit_obj]", false);
-  unsigned short *data = slab.value();
+  slab.set_external(node[conduit_key + "/slab"]);
+  prof_region_end("set_external", false);
+  short *data = slab.value();
   prof_region_begin("copy_to_buffer", prof_colors[0], false);
   std::memcpy(X.Buffer(), data, slab.dtype().number_of_elements()*slab.dtype().element_bytes());
   prof_region_end("copy_to_buffer", false);
-
-  prof_region_end("fetch_datum", false);
-  return true;
 }
 
 //get from a cached response
 bool hdf5_reader::fetch_response(Mat& Y, int data_id, int mb_idx) {
   prof_region_begin("fetch_response", prof_colors[0], false);
   assert_eq(Y.Height(), m_num_response_features);
-  float *buf;
-  // Create a node to hold all of the data
-  conduit::Node node;
+  float *buf = nullptr;
   if (data_store_active()) {
+    conduit::Node node;
     const conduit::Node& ds_node = m_data_store->get_conduit_node(data_id);
     node.set_external(ds_node);
     const std::string conduit_obj = LBANN_DATA_ID_STR(data_id);
