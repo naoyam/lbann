@@ -70,9 +70,8 @@ ALUMINUM_WITH_NCCL=
 WITH_CONDUIT=ON
 AVOID_CUDA_AWARE_MPI=OFF
 WITH_DISTCONV=OFF
-DIHYDROGEN_URL=https://github.com/llnl/dihydrogen
-DIHYDROGEN_TAG=master
-WITH_P2P=OFF
+#DIHYDROGEN_URL=https://github.com/llnl/dihydrogen
+#DIHYDROGEN_TAG=master
 WITH_NVSHMEM=OFF
 WITH_TBINF=OFF
 RECONFIGURE=0
@@ -222,17 +221,6 @@ while :; do
             BUILD_TYPE=Debug
             DETERMINISTIC=ON
             ;;
-        --tbinf)
-            # Tensorboard interface
-            WITH_TBINF=ON
-            ;;
-        --vtune)
-            # VTune libraries
-            WITH_VTUNE=ON
-            ;;
-        --nvprof)
-            WITH_NVPROF=ON
-            ;;
         --clean-build|--build-clean)
             # Clean build directory
             CLEAN_BUILD=1
@@ -297,10 +285,7 @@ while :; do
             echo "Error: do not pass --distconv-cosmoflow-int16 as it is no longer used"
             exit 1
             ;;
-        --with-p2p)
-            WITH_P2P=ON
-            ;;
-         --with-nvshmem)
+        --with-nvshmem)
             WITH_NVSHMEM=ON
             ;;
         --instrument)
@@ -773,8 +758,6 @@ if [ ${VERBOSE} -ne 0 ]; then
     print_variable VTUNE_DIR
     print_variable WITH_CUDA
     print_variable WITH_CUDNN
-    print_variable WITH_NVPROF
-    print_variable WITH_P2P
     print_variable WITH_NVSHMEM
     print_variable DETERMINISTIC
     print_variable CLEAN_BUILD
@@ -849,9 +832,9 @@ cmake \
 -D CMAKE_CXX_COMPILER=${CXX_COMPILER} \
 -D CMAKE_Fortran_COMPILER=${Fortran_COMPILER} \
 -D LBANN_WITH_CUDA=${WITH_CUDA} \
--D LBANN_WITH_NVPROF=${WITH_NVPROF} \
--D LBANN_WITH_VTUNE=${WITH_VTUNE} \
--D LBANN_WITH_TBINF=${WITH_TBINF} \
+-D LBANN_WITH_NVPROF=OFF \
+-D LBANN_WITH_VTUNE=OFF \
+-D LBANN_WITH_TBINF=OFF \
 -D LBANN_WITH_TOPO_AWARE=${WITH_TOPO_AWARE} \
 -D LBANN_DATATYPE=${DATATYPE} \
 -D LBANN_DETERMINISTIC=${DETERMINISTIC} \
@@ -865,8 +848,8 @@ cmake \
 -D LBANN_WITH_DISTCONV=${WITH_DISTCONV} \
 -D DIHYDROGEN_URL=${DIHYDROGEN_URL} \
 -D DIHYDROGEN_TAG=${DIHYDROGEN_TAG} \
--D LBANN_SB_BUILD_P2P=${WITH_P2P} \
--D LBANN_WITH_P2P=${WITH_P2P} \
+-D LBANN_SB_BUILD_P2P=OFF \
+-D LBANN_WITH_P2P=OFF \
 -D LBANN_WITH_NVSHMEM=${WITH_NVSHMEM} \
 -D NVSHMEM_DIR=${NVSHMEM_DIR} \
 -D LBANN_SB_FWD_HYDROGEN_Hydrogen_AVOID_CUDA_AWARE_MPI=${AVOID_CUDA_AWARE_MPI} \
@@ -939,24 +922,6 @@ if [ ${INSTALL_LBANN} -ne 0 ]; then
     if [ $? -ne 0 ]; then
         echo "--------------------"
         echo "INSTALL FAILED"
-        echo "--------------------"
-        exit 1
-    fi
-fi
-
-# Generate documentation with make
-if [ ${GEN_DOC} -ne 0 ]; then
-    DOC_COMMAND="make doc"
-    if [ ${USE_NINJA} -ne 0 ]; then
-        DOC_COMMAND="ninja doc"
-    fi
-    if [ ${VERBOSE} -ne 0 ]; then
-        echo "${DOC_COMMAND}"
-    fi
-    eval ${DOC_COMMAND}
-    if [ $? -ne 0 ]; then
-        echo "--------------------"
-        echo "BUILDING DOC FAILED"
         echo "--------------------"
         exit 1
     fi
