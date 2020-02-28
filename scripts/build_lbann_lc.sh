@@ -73,6 +73,7 @@ WITH_DISTCONV=OFF
 DIHYDROGEN_URL=https://github.com/llnl/dihydrogen
 DIHYDROGEN_TAG=master
 WITH_P2P=OFF
+WITH_NVSHMEM=OFF
 WITH_TBINF=OFF
 RECONFIGURE=0
 USE_NINJA=0
@@ -298,6 +299,9 @@ while :; do
             ;;
         --with-p2p)
             WITH_P2P=ON
+            ;;
+         --with-nvshmem)
+            WITH_NVSHMEM=ON
             ;;
         --instrument)
             INSTRUMENT="-finstrument-functions -ldl"
@@ -662,6 +666,19 @@ if [ "${WITH_CUDA}" == "ON" ]; then
         exit 1
     fi
     export NCCL_DIR
+
+    # NVSHMEM
+    if [[ $WITH_NVSHMEM == ON ]]; then
+        NVSHMEM_VERSION=0.3.3
+        NVSHMEM_DIR=${NVSHMEM_DIR:-/usr/workspace/wsb/brain/nvshmem/nvshmem_$NVSHMEM_VERSION/cuda-${CUDA_TOOLKIT_VERSION}_$(uname -p)}
+        if [[ ! -d $NVSHMEM_DIR ]]; then
+            echo "Error! NVSHMEM directory, $NVSHMEM_DIR, does not exist."
+            exit 1
+        fi
+        echo "Using NVSHMEM at $NVSHMEM_DIR"
+    else
+        NVSHMEM_DIR=
+    fi
 else
     HAS_GPU=0
     WITH_CUDA=${WITH_CUDA:-OFF}
@@ -757,6 +774,8 @@ if [ ${VERBOSE} -ne 0 ]; then
     print_variable WITH_CUDA
     print_variable WITH_CUDNN
     print_variable WITH_NVPROF
+    print_variable WITH_P2P
+    print_variable WITH_NVSHMEM
     print_variable DETERMINISTIC
     print_variable CLEAN_BUILD
     print_variable VERBOSE
@@ -848,6 +867,8 @@ cmake \
 -D DIHYDROGEN_TAG=${DIHYDROGEN_TAG} \
 -D LBANN_SB_BUILD_P2P=${WITH_P2P} \
 -D LBANN_WITH_P2P=${WITH_P2P} \
+-D LBANN_WITH_NVSHMEM=${WITH_NVSHMEM} \
+-D NVSHMEM_DIR=${NVSHMEM_DIR} \
 -D LBANN_SB_FWD_HYDROGEN_Hydrogen_AVOID_CUDA_AWARE_MPI=${AVOID_CUDA_AWARE_MPI} \
 -D LBANN_SB_FWD_ALUMINUM_ALUMINUM_ENABLE_STREAM_MEM_OPS=OFF \
 -D LBANN_SB_FWD_ALUMINUM_ALUMINUM_HT_USE_PASSTHROUGH=OFF \

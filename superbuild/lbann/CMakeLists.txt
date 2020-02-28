@@ -118,6 +118,11 @@ if (TARGET PROTOBUF)
   endif ()
 endif ()
 
+if (LBANN_WITH_NVSHMEM)
+  set(LBANN_SB_FWD_LBANN_NVSHMEM_DIR "${NVSHMEM_DIR}"
+    CACHE STRING "The path to NVSHMEM for LBANN.")
+endif ()
+
 # Distconv
 if (TARGET P2P)
   option(LBANN_WITH_P2P "Whether to use P2P in LBANN" OFF)

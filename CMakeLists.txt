@@ -22,6 +22,13 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   set(LBANN_DEBUG TRUE)
 endif ()
 
+if (LBANN_WITH_NVSHMEM)
+  if (BUILD_SHARED_LIBS)
+    message(FATAL_ERROR "Shared library not supported NVSHMEM")
+  endif ()
+  set (BUILD_SHARED_LIBS OFF)
+endif ()
+
 if (NOT DEFINED BUILD_SHARED_LIBS)
   set(BUILD_SHARED_LIBS ON)
 endif ()
@@ -103,6 +110,8 @@ option(LBANN_WITH_CNPY "Include cnpy" ON)
 option(LBANN_WITH_CONDUIT "Enable Conduit library" ON)
 
 option(LBANN_WITH_CUDNN "Include Nvidia cuDNN" ON)
+
+option(LBANN_WITH_NVSHMEM "Include Nvidia NVSHMEM" OFF)
 
 option(LBANN_WITH_HWLOC
   "Enable topology-aware optimizations" ON)
@@ -294,6 +303,8 @@ if (LBANN_HAS_CUDA)
   else ()
     set(LBANN_HAS_NCCL2 FALSE)
   endif ()
+
+  set(LBANN_HAS_NVSHMEM ${NVSHMEM_FOUND})
 endif (LBANN_HAS_CUDA)
 
 # This shouldn't be here, but is ok for now. This will occasionally be
@@ -561,6 +572,10 @@ endif ()
 
 if (LBANN_HAS_DISTCONV)
   target_link_libraries(lbann PUBLIC DIHYDROGEN::DIHYDROGEN)
+  # DiHydrogen depends on NVSHMEM
+  if (LBANN_HAS_NVSHMEM)
+    target_link_libraries(lbann PUBLIC cuda::nvshmem)
+  endif ()
 endif ()
 
 if (LBANN_HAS_P2P)
@@ -573,6 +588,11 @@ endif ()
 
 if (LBANN_HAS_PYTHON)
   target_link_libraries(lbann PUBLIC Python::Python)
+endif ()
+
+if (LBANN_HAS_NVSHMEM)
+  set_property(TARGET lbann APPEND PROPERTY
+    CUDA_SEPARABLE_COMPILATION oN)
 endif ()
 
 if (TARGET LBANN_CXX_FLAGS_werror)

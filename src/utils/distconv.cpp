@@ -409,6 +409,14 @@ HaloExchangeMethod get_halo_exchange_method() {
   } else if (opt_halo_exchange == "HYBRID") {
     return HaloExchangeMethod::HYBRID;
 #endif // LBANN_HAS_P2P
+#ifdef LBANN_HAS_NVSHMEM
+  } else if (opt_halo_exchange == "NVSHMEM") {
+    return HaloExchangeMethod::NVSHMEM;
+  } else if (opt_halo_exchange == "NVSHMEM_DIRECT") {
+    return HaloExchangeMethod::NVSHMEM_DIRECT;
+  } else if (opt_halo_exchange == "NVSHMEM_FUSED_NOTIFY") {
+    return HaloExchangeMethod::NVSHMEM_FUSED_NOTIFY;
+#endif // LBANN_HAS_NVSHMEM
   } else {
     LBANN_ERROR("Unknown value of option opt_halo_exchange");
   }

@@ -49,6 +49,10 @@
 #include "lbann/utils/python.hpp"
 #endif
 
+#ifdef LBANN_HAS_NVSHMEM
+#include "lbann/utils/cuda.hpp"
+#endif
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -100,6 +104,10 @@ world_comm_ptr initialize(int& argc, char**& argv, int seed) {
   init_data_seq_random(seed);
 
 #ifdef LBANN_HAS_DISTCONV
+  cuda::nvshmem::initialize(MPI_COMM_WORLD);
+#endif
+
+#ifdef LBANN_HAS_DISTCONV
   dc::initialize(MPI_COMM_WORLD);
 #endif
 
@@ -109,6 +117,9 @@ world_comm_ptr initialize(int& argc, char**& argv, int seed) {
 void finalize(lbann_comm* comm) {
 #ifdef LBANN_HAS_DISTCONV
   dc::finalize();
+#endif
+#ifdef LBANN_HAS_DISTCONV
+  cuda::nvshmem::finalize();
 #endif
 #ifdef LBANN_HAS_CUDNN
   cudnn::destroy();
