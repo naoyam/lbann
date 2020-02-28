@@ -36,6 +36,7 @@
 
 #cmakedefine LBANN_HAS_CUDA
 #cmakedefine LBANN_HAS_CUDNN
+#cmakedefine LBANN_HAS_NVSHMEM
 
 #cmakedefine LBANN_VTUNE
 #cmakedefine LBANN_NVPROF

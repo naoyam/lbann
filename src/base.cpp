@@ -49,6 +49,10 @@
 #include "lbann/utils/python.hpp"
 #endif
 
+#ifdef LBANN_HAS_NVSHMEM
+#include "lbann/utils/cuda.hpp"
+#endif
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -60,6 +64,22 @@
 namespace lbann {
 
 world_comm_ptr initialize(int& argc, char**& argv, int seed) {
+#if defined(LBANN_HAS_NVSHMEM) && defined(LBANN_HAS_DISTCONV)
+  // Hack to initialize NVSHMEM before CUBLAS
+  {
+    auto dev_id = dc::util::choose_gpu();
+    CHECK_CUDA(cudaSetDevice(dev_id));
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    if (provided != MPI_THREAD_MULTIPLE) {
+      LBANN_ERROR("MPI_THREAD_MULTIPLE not provided");
+    }
+    dc::MPIPrintStreamInfo() << "Using device " << dev_id;
+    dc::MPIPrintStreamInfo() << "Initializing NVSHMEM";
+    cuda::nvshmem::initialize(MPI_COMM_WORLD);
+    dc::MPIPrintStreamInfo() << "NVSHMEM initialized";
+  }
+#endif
   // Initialize Elemental.
   El::Initialize(argc, argv);
   // Create a new comm object.
