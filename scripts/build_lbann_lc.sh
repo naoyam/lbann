@@ -13,13 +13,6 @@ CORAL=$([[ $(hostname) =~ (sierra|lassen|ray) ]] && echo 1 || echo 0)
 # Default options
 ################################################################
 
-COMPILER=gnu
-
-if [ "${ARCH}" == "x86_64" ]; then
-    MPI=mvapich2
-elif [ "${ARCH}" == "ppc64le" ]; then
-    MPI=spectrum
-fi
 BUILD_TYPE=Release
 
 C_FLAGS=
@@ -95,35 +88,10 @@ while :; do
 done
 
 USE_MODULES=1
-# Get compiler directory
-COMPILER_=${COMPILER}
 
-if [ "${COMPILER_}" == "gnu" ]; then
-    COMPILER_=gcc
-fi
-if [ -z "$(module list 2>&1 | grep ${COMPILER_})" ]; then
-    if [ "${COMPILER_}" == "gcc" ]; then
-        # Special case to avoid GCC 8.1
-        # Note: This should be removed once the bug in GCC 8.1 is
-        # patched. See https://github.com/LLNL/lbann/issues/529.
-        COMPILER_=$(module --terse spider ${COMPILER_} 2>&1 | grep -v 8.1.0 | sed '/^$/d' | tail -1)
-    else
-        COMPILER_=$(module --terse spider ${COMPILER_} 2>&1 | sed '/^$/d' | tail -1)
-    fi
-    #module load ${COMPILER_}
-fi
-
-#COMPILER_BASE="$(module show ${COMPILER_} 2>&1 | grep '\"PATH\"' | cut -d ',' -f 2 | cut -d ')' -f 1 | sed 's/\/bin//' | sed 's/\"//g')"
-
-# GNU compilers
-#C_COMPILER=${COMPILER_BASE}/bin/gcc
 C_COMPILER=$(which gcc)
-#CXX_COMPILER=${COMPILER_BASE}/bin/g++
 CXX_COMPILER=$(which g++)
-#Fortran_COMPILER=${COMPILER_BASE}/bin/gfortran
 Fortran_COMPILER=$(which gfortran)
-#COMPILER_VERSION=$(${C_COMPILER} --version | head -n 1 | awk '{print $3}')
-#FORTRAN_LIB=${COMPILER_BASE}/lib64/libgfortran.so
 
 C_FLAGS="${C_FLAGS} -O3 -fno-omit-frame-pointer"
 CXX_FLAGS="${CXX_FLAGS} -O3  -fno-omit-frame-pointer"
@@ -149,7 +117,7 @@ ROOT_DIR=$(realpath $(dirname $0)/..)
 
 # Initialize build directory
 if [ -z "${BUILD_DIR}" ]; then
-    BUILD_DIR=${ROOT_DIR}/build/${COMPILER}.${BUILD_TYPE}.${CLUSTER}.llnl.gov
+    BUILD_DIR=${ROOT_DIR}/build/${BUILD_TYPE}.${CLUSTER}.llnl.gov
 fi
 if [ -n "${BUILD_SUFFIX}" ]; then
     BUILD_DIR=${BUILD_DIR}.${BUILD_SUFFIX}
@@ -164,38 +132,12 @@ mkdir -p ${INSTALL_DIR}
 
 SUPERBUILD_DIR="${ROOT_DIR}/superbuild"
 
-################################################################
-# Initialize MPI compilers
-################################################################
-
-if [ "${MPI}" == "spectrum" ]; then
-    MPI=spectrum-mpi
-fi
-
-if [ -z "${MPI_HOME}" ]; then
-	if [ -z "$(module list 2>&1 | grep ${MPI})" ]; then
-		MPI=$(module --terse spider ${MPI} 2>&1 | sed '/^$/d' | tail -1)
-		module load ${MPI}
-	fi
-	if [ -z "$(module list 2>&1 | grep ${MPI})" ]; then
-		echo "Could not load module (${MPI})"
-		exit 1
-	fi
-	MPI_HOME=$(module show ${MPI} 2>&1 | grep '\"PATH\"' | cut -d ',' -f 2 | cut -d ')' -f 1 | sed 's/\/bin//' | sed 's/\"//g')
-fi
 
 # Get MPI compilers
-#export MPI_HOME
-#export CMAKE_PREFIX_PATH=${MPI_HOME}:${CMAKE_PREFIX_PATH}
-#export MPI_C_COMPILER=${MPI_HOME}/bin/mpicc
 export MPI_C_COMPILER=$(which mpicc)
-#export MPI_CXX_COMPILER=${MPI_HOME}/bin/mpicxx
 export MPI_CXX_COMPILER=$(which mpicxx)
-#export MPI_Fortran_COMPILER=${MPI_HOME}/bin/mpifort
 export MPI_Fortran_COMPILER=$(which mpifort)
-if [ "${MPI}" == "spectrum-mpi" ]; then
-    WITH_SPECTRUM=ON
-fi
+WITH_SPECTRUM=ON
 
 ################################################################
 # Initialize GPU libraries
@@ -224,7 +166,7 @@ if [ -z "${CUDA_TOOLKIT_ROOT_DIR}" ]; then
 		CUDA_TOOLKIT_ROOT_DIR=${CUDA_HOME:-${CUDA_PATH}}
 	fi
 fi
-export CUDA_TOOLKIT_ROOT_DIR
+#export CUDA_TOOLKIT_ROOT_DIR
 
 # CUDNN
 CUDNN_DIR=/usr/workspace/wsb/brain/cudnn/cudnn-7.6.4/cuda-10.1_ppc64le
