@@ -27,117 +27,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "lbann/lbann.hpp"
-#include "lbann/proto/proto_common.hpp"
-#include "lbann/utils/protobuf_utils.hpp"
-#include "lbann/data_store/data_store_conduit.hpp"
-
-#include <lbann.pb.h>
-#include <model.pb.h>
-
-#include <cstdlib>
-
-using namespace lbann;
 
 int main(int argc, char *argv[]) {
   std::cerr << "Starting LBANN" << std::endl;
-  int random_seed = lbann_default_random_seed;
-  world_comm_ptr comm = initialize(argc, argv, random_seed);
-  comm->am_world_master();
+  int random_seed = 0;
+  lbann::initialize(argc, argv, random_seed);
 
-#if 0
-  if (master) {
-    std::cout << "\n\n==============================================================\n"
-              << "STARTING lbann with this command line:\n";
-    for (int j=0; j<argc; j++) {
-      std::cout << argv[j] << " ";
-    }
-    std::cout << std::endl << std::endl;
-  }
-
-  try {
-    // Initialize options db (this parses the command line)
-    options *opts = options::get();
-    opts->init(argc, argv);
-    if (opts->has_string("h") or opts->has_string("help") or argc == 1) {
-      print_help(*comm);
-      return EXIT_SUCCESS;
-    }
-
-    //this must be called after call to opts->init();
-    if (!opts->get_bool("disable_signal_handler")) {
-      std::string file_base = (opts->get_bool("stack_trace_to_file") ?
-                               "stack_trace" : "");
-      stack_trace::register_signal_handler(file_base);
-    }
-
-    //to activate, must specify --st_on on cmd line
-    stack_profiler::get()->activate(comm->get_rank_in_world());
-
-    // Load the prototexts specificed on the command line
-    auto pbs = protobuf_utils::load_prototext(master, argc, argv);
-    // Optionally over-ride some values in the prototext for each model
-    for(size_t i = 0; i < pbs.size(); i++) {
-      get_cmdline_overrides(*comm, *(pbs[i]));
-    }
-
-    lbann_data::LbannPB& pb = *(pbs[0]);
-    lbann_data::Trainer *pb_trainer = pb.mutable_trainer();
-
-    // Construct the trainer
-    std::unique_ptr<trainer> trainer = construct_trainer(comm.get(), pb_trainer, opts);
-
-    thread_pool& io_thread_pool = trainer->get_io_thread_pool();
-
-    lbann_data::Model *pb_model = pb.mutable_model();
-
-    auto model = build_model_from_prototext(argc, argv, pb_trainer, pb,
-                                            comm.get(), opts, io_thread_pool, true);
-
-    if (opts->has_string("create_tarball")) {
-      return EXIT_SUCCESS;
-    }
-
-    if (! opts->get_bool("exit_after_setup")) {
-
-      // Train model
-      trainer->train(model.get(), pb_model->num_epochs());
-
-      // Evaluate model on test set
-      trainer->evaluate(model.get(), execution_mode::testing);
-
-      //has no affect unless option: --st_on was given
-      stack_profiler::get()->print();
-
-    } else {
-      if (comm->am_world_master()) {
-        std::cout <<
-          "--------------------------------------------------------------------------------\n"
-          "ALERT: model has been setup; we are now exiting due to command\n"
-          "       line option: --exit_after_setup\n"
-          "--------------------------------------------------------------------------------\n";
-      }
-
-      //has no affect unless option: --st_on was given
-      stack_profiler::get()->print();
-    }
-
-  } catch (exception& e) {
-    if (options::get()->get_bool("stack_trace_to_file")) {
-      std::ostringstream ss("stack_trace");
-      const auto& rank = get_rank_in_world();
-      if (rank >= 0) {
-        ss << "_rank" << rank;
-      }
-      ss << ".txt";
-      std::ofstream fs(ss.str());
-      e.print_report(fs);
-    }
-    El::ReportException(e);
-    return EXIT_FAILURE;
-  } catch (std::exception& e) {
-    El::ReportException(e);
-    return EXIT_FAILURE;
-  }
-#endif
   return EXIT_SUCCESS;
 }

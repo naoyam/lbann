@@ -156,10 +156,6 @@ world_comm_ptr initialize(int& argc, char**& argv, int seed) {
   init_random(seed);
   init_data_seq_random(seed);
 
-#ifdef LBANN_HAS_DISTCONV
-  dc::initialize(MPI_COMM_WORLD);
-#endif
-
   return comm;
 }
 
