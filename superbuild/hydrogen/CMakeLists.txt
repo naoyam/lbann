@@ -104,12 +104,14 @@ if (HYDROGEN_CLONE_VIA_SSH)
   set(HYDROGEN_URL git@github.com:LLNL/Elemental.git
     CACHE STRING "The URL from which to clone Hydrogen")
 else ()
-  set(HYDROGEN_URL "https://github.com/LLNL/Elemental.git"
+  set(HYDROGEN_URL #"https://github.com/LLNL/Elemental.git"
+    "https://github.com/naoyam/Elemental.git"
     CACHE STRING "The URL from which to clone Hydrogen")
 endif ()
 
 # ... then the tag.
-set(HYDROGEN_TAG "v1.2.0"
+set(HYDROGEN_TAG #"v1.2.0"
+  "v1.2.0-fix"
   CACHE STRING "The git tag or hash to checkout for Hydrogen")
 
 if (HYDROGEN_CUSTOM_SOURCE_DIR)
