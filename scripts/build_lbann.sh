@@ -3,6 +3,7 @@
 set -e
 
 BUILD_SUFFIX=
+SHARED_LIB=ON
 
 while :; do
     case ${1} in
@@ -15,6 +16,12 @@ while :; do
                 echo "\"${1}\" option requires a non-empty option argument" >&2
                 exit 1
             fi
+            ;;
+        --static)
+            SHARED_LIB=OFF
+            ;;
+        --shared)
+            SHARED_LIB=ON
             ;;
         -?*)
             # Unknown option
@@ -117,6 +124,7 @@ cmake \
 -D LBANN_WITH_NVSHMEM=${WITH_NVSHMEM} \
 -D LBANN_WITH_UNIT_TESTING=OFF \
 -D NVSHMEM_DIR=${NVSHMEM_DIR} \
+-D LBANN_SB_FWD_LBANN_BUILD_SHARED_LIBS=${SHARED_LIB} \
 ${SUPERBUILD_DIR}
 EOF
 )

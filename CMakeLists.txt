@@ -26,6 +26,8 @@ if (NOT DEFINED BUILD_SHARED_LIBS)
   set(BUILD_SHARED_LIBS ON)
 endif ()
 
+message(STATUS "BUILD_SHARED_LIBS: ${BUILD_SHARED_LIBS}")
+
 # Build with at least C++11 standard; allow newer standards.
 if (NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD EQUAL 98)
   set(CMAKE_CXX_STANDARD 11)
@@ -631,8 +633,9 @@ endif ()
 add_subdirectory(model_zoo)
 add_subdirectory(model_zoo/tests)
 add_subdirectory(model_zoo/jag_utils)
-add_subdirectory(tests)
-add_subdirectory(scripts)
+#add_subdirectory(tests)
+#add_subdirectory(scripts)
+add_subdirectory(nvshmem_test)
 
 ################################################################
 # Install LBANN

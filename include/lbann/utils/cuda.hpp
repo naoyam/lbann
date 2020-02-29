@@ -38,10 +38,10 @@
 #include <thrust/system/cuda/detail/par.h>
 #include <thrust/device_vector.h>
 
-#ifdef LBANN_HAS_NVSHMEM
-#include "nvshmem.h"
-#include "nvshmemx.h"
-#endif // LBANN_HAS_NVSHMEM
+// #ifdef LBANN_HAS_NVSHMEM
+// #include "nvshmem.h"
+// #include "nvshmemx.h"
+// #endif // LBANN_HAS_NVSHMEM
 
 // -------------------------------------------------------------
 // Error utility macros
@@ -102,16 +102,6 @@
 #else
 #define CHECK_CUDA(cuda_call) FORCE_CHECK_CUDA_NOSYNC(cuda_call)
 #endif // #ifdef LBANN_DEBUG
-
-#ifdef LBANN_HAS_NVSHMEM
-#define CHECK_NVSHMEM(nvshmem_call)                             \
-  do {                                                          \
-    int status = (nvshmem_call);                                \
-    if (status != 0) {                                          \
-      LBANN_ERROR("NVSHMEM error (", status, ")");              \
-    }                                                           \
-  } while (0)
-#endif // LBANN_HAS_NVSHMEM
 
 namespace lbann {
 namespace cuda {
@@ -343,21 +333,21 @@ inline size_t get_total_memory_capacity() {
   return total;
 }
 
-#ifdef LBANN_HAS_NVSHMEM
-namespace nvshmem {
+// #ifdef LBANN_HAS_NVSHMEM
+// namespace nvshmem {
 
-inline void initialize(MPI_Comm comm) {
-  nvshmemx_init_attr_t attr;
-  attr.mpi_comm = &comm;
-  CHECK_NVSHMEM(nvshmemx_init_attr(NVSHMEMX_INIT_WITH_MPI_COMM, &attr));
-}
+// inline void initialize(MPI_Comm comm) {
+//   nvshmemx_init_attr_t attr;
+//   attr.mpi_comm = &comm;
+//   CHECK_NVSHMEM(nvshmemx_init_attr(NVSHMEMX_INIT_WITH_MPI_COMM, &attr));
+// }
 
-inline void finalize() {
-  nvshmem_finalize();
-}
+// inline void finalize() {
+//   nvshmem_finalize();
+// }
 
-} // namespace nvshmem
-#endif // LBANN_HAS_NVSHMEM
+// } // namespace nvshmem
+// #endif // LBANN_HAS_NVSHMEM
 
 } // namespace cuda
 
