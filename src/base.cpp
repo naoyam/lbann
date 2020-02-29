@@ -57,27 +57,64 @@
 #include <string>
 #include <vector>
 
-#ifdef LBANN_HAS_DISTCONV
-#include "lbann/utils/distconv.hpp"
-#endif
-
 namespace lbann {
 
+int get_number_of_gpus() {
+  int num_gpus = 0;
+  CHECK_CUDA(cudaGetDeviceCount(&num_gpus));
+  return num_gpus;
+}
+
+int get_local_rank() {
+  char *env = std::getenv("MV2_COMM_WORLD_LOCAL_RANK");
+  if (!env) env = std::getenv("OMPI_COMM_WORLD_LOCAL_RANK");
+  if (!env) env = std::getenv("SLURM_LOCALID");
+  if (!env) {
+    std::cerr << "Can't determine local rank\n";
+    abort();
+  }
+  return std::atoi(env);
+}
+
+int get_local_size() {
+  char *env = std::getenv("MV2_COMM_WORLD_LOCAL_SIZE");
+  if (!env) env = std::getenv("OMPI_COMM_WORLD_LOCAL_SIZE");
+  if (!env) env = std::getenv("SLURM_TASKS_PER_NODE");  
+  if (!env) {
+    std::cerr << "Can't determine local size\n";
+    abort();
+  }
+  return std::atoi(env);
+}
+
+int choose_gpu() {
+  int num_gpus = get_number_of_gpus();
+  int local_rank = get_local_rank();
+  int local_size = get_local_size();
+  if (num_gpus < local_size) {
+    std::cerr << "Warning: Number of GPUs, " << num_gpus
+              << " is smaller than the number of local MPI ranks, "
+              << local_size << std::endl;
+  }
+  int gpu = local_rank % num_gpus;
+  return gpu;
+}
+
 world_comm_ptr initialize(int& argc, char**& argv, int seed) {
-#if defined(LBANN_HAS_NVSHMEM) && defined(LBANN_HAS_DISTCONV)
+#ifdef LBANN_HAS_NVSHMEM
   // Hack to initialize NVSHMEM before CUBLAS
   {
-    auto dev_id = dc::util::choose_gpu();
+    auto dev_id = choose_gpu();
     CHECK_CUDA(cudaSetDevice(dev_id));
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     if (provided != MPI_THREAD_MULTIPLE) {
       LBANN_ERROR("MPI_THREAD_MULTIPLE not provided");
     }
-    dc::MPIPrintStreamInfo() << "Using device " << dev_id;
-    dc::MPIPrintStreamInfo() << "Initializing NVSHMEM";
+    std::cerr << "Using device " << dev_id << std::endl;
+    std::cerr << "Initializing NVSHMEM" << std::endl;
     cuda::nvshmem::initialize(MPI_COMM_WORLD);
-    dc::MPIPrintStreamInfo() << "NVSHMEM initialized";
+    std::cerr << "NVSHMEM initialized" << std::endl;
   }
 #endif
   // Initialize Elemental.

@@ -27,7 +27,7 @@
 #include "lbann/io/data_buffers/partitioned_io_buffer.hpp"
 #include "lbann/utils/exception.hpp"
 #include "lbann/utils/profiling.hpp"
-#include "lbann/utils/distconv.hpp"
+//#include "lbann/utils/distconv.hpp"
 
 lbann::partitioned_io_buffer::partitioned_io_buffer(lbann_comm *comm, int num_parallel_readers, std::map<execution_mode, generic_data_reader *> data_readers, int num_child_layers)
   : generic_io_buffer(comm, num_parallel_readers, data_readers) {
@@ -81,10 +81,12 @@ void lbann::partitioned_io_buffer::setup_data(El::Int num_neurons, El::Int num_t
 #endif
   El::Int local_mini_batch_size = max_mini_batch_size / m_comm->get_procs_per_trainer();
   El::Int partial_mini_batch_size = max_mini_batch_size % m_comm->get_procs_per_trainer();
+#if 0  
   if (dc::is_cosmoflow_parallel_io_enabled()) {
     assert_eq(local_mini_batch_size, 1);
     assert_eq(partial_mini_batch_size, 0);
   }
+#endif  
   if(partial_mini_batch_size > 0 && m_comm->get_rank_in_trainer() < partial_mini_batch_size) {
     local_mini_batch_size++;
   }

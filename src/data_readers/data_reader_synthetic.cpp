@@ -39,6 +39,7 @@ namespace lbann {
 namespace {
 
 void fill_buffer(DataType *buf, size_t len) {
+#if 0
   auto randgen_method = dc::get_synthetic_data_reader_randgen();
   if (randgen_method == "ONE") {
     std::fill_n(buf, len, (DataType) 1);
@@ -56,6 +57,7 @@ void fill_buffer(DataType *buf, size_t len) {
       buf[i] = dist(gen);
     }
   }
+#endif
 }
 
 void fill_matrix(CPUMat& mat, DataType * __restrict__ pre_generated=nullptr) {
@@ -125,6 +127,7 @@ void data_reader_synthetic::load() {
 }
 
 void data_reader_synthetic::pre_generate() {
+#if 0
   m_num_pre_generated_data = dc::get_number_of_pre_generated_synthetic_data();
   if (m_num_pre_generated_data == 0) return;
 
@@ -145,6 +148,7 @@ void data_reader_synthetic::pre_generate() {
                                  std::default_delete<DataType[]>());
   fill_buffer(m_pre_generated_response.get(), len);
   m_pre_generated_response_idx = 0;
+#endif
 }
 
 DataType *data_reader_synthetic::get_next_pre_generated_datum() {

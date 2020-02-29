@@ -42,8 +42,9 @@ int main(int argc, char *argv[]) {
   std::cerr << "Starting LBANN" << std::endl;
   int random_seed = lbann_default_random_seed;
   world_comm_ptr comm = initialize(argc, argv, random_seed);
-  const bool master = comm->am_world_master();
+  comm->am_world_master();
 
+#if 0
   if (master) {
     std::cout << "\n\n==============================================================\n"
               << "STARTING lbann with this command line:\n";
@@ -137,6 +138,6 @@ int main(int argc, char *argv[]) {
     El::ReportException(e);
     return EXIT_FAILURE;
   }
-
+#endif
   return EXIT_SUCCESS;
 }
