@@ -2,7 +2,12 @@
 # Parallel Tests
 add_executable( lbann-bin lbann.cpp )
 target_link_libraries(lbann-bin lbann )
+#target_link_libraries(lbann-bin cuda::toolkit)
+#target_link_libraries(lbann-bin MPI::MPI_CXX)
 set_target_properties(lbann-bin PROPERTIES OUTPUT_NAME lbann)
+
+#set_property(TARGET lbann-bin APPEND PROPERTY
+#  CUDA_SEPARABLE_COMPILATION ON)
 
 # add_executable( lbann-help lbann_help.cpp )
 # target_link_libraries(lbann-help lbann )

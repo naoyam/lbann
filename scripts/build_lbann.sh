@@ -115,6 +115,7 @@ cmake \
 -D LBANN_WITH_ALUMINUM=${WITH_ALUMINUM} \
 -D LBANN_SB_BUILD_CATCH2=ON \
 -D LBANN_WITH_NVSHMEM=${WITH_NVSHMEM} \
+-D LBANN_WITH_UNIT_TESTING=OFF \
 -D NVSHMEM_DIR=${NVSHMEM_DIR} \
 ${SUPERBUILD_DIR}
 EOF
@@ -130,7 +131,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Build LBANN with make
-BUILD_COMMAND="make -j"
+BUILD_COMMAND="make -j VERBOSE=1"
 eval ${BUILD_COMMAND}
 if [ $? -ne 0 ]; then
     echo "--------------------"

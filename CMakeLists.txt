@@ -489,27 +489,27 @@ if (LBANN_WITH_P2P)
   endif ()
 endif ()
 
-if (LBANN_WITH_UNIT_TESTING)
-  find_package(Catch2 2.0.0 CONFIG QUIET
-    HINTS ${CATCH2_DIR} $ENV{CATCH2_DIR} ${CATCH_DIR} $ENV{CATCH_DIR}
-    PATH_SUFFIXES lib64/cmake/Catch2 lib/cmake/Catch2
-    NO_DEFAULT_PATH)
-  if (NOT Catch2_FOUND)
-    find_package(Catch2 2.0.0 CONFIG QUIET REQUIRED)
-  endif ()
-  message(STATUS "Found Catch2: ${Catch2_DIR}")
+# if (LBANN_WITH_UNIT_TESTING)
+#   find_package(Catch2 2.0.0 CONFIG QUIET
+#     HINTS ${CATCH2_DIR} $ENV{CATCH2_DIR} ${CATCH_DIR} $ENV{CATCH_DIR}
+#     PATH_SUFFIXES lib64/cmake/Catch2 lib/cmake/Catch2
+#     NO_DEFAULT_PATH)
+#   if (NOT Catch2_FOUND)
+#     find_package(Catch2 2.0.0 CONFIG QUIET REQUIRED)
+#   endif ()
+#   message(STATUS "Found Catch2: ${Catch2_DIR}")
 
-  # Now that Catch2 has been found, start adding the unit tests
-  include(CTest)
-  include(Catch)
-  add_subdirectory(src/proto/unit_test)
-  add_subdirectory(src/utils/unit_test)
-  add_subdirectory(src/transforms/unit_test)
-  add_subdirectory(src/transforms/vision/unit_test)
+#   # Now that Catch2 has been found, start adding the unit tests
+#   include(CTest)
+#   include(Catch)
+#   add_subdirectory(src/proto/unit_test)
+#   add_subdirectory(src/utils/unit_test)
+#   add_subdirectory(src/transforms/unit_test)
+#   add_subdirectory(src/transforms/vision/unit_test)
 
-  # Add this one last
-  add_subdirectory(unit_test)
-endif (LBANN_WITH_UNIT_TESTING)
+#   # Add this one last
+#   add_subdirectory(unit_test)
+# endif (LBANN_WITH_UNIT_TESTING)
 
 # Handle the documentation
 add_subdirectory(docs)
