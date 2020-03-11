@@ -46,10 +46,11 @@ class split_distconv_layer: public data_type_distconv_layer<TensorDataType> {
   split_distconv_layer(Layer& layer): data_type_distconv_layer<TensorDataType>(layer) {}
   virtual ~split_distconv_layer() = default;
   void setup_activations(const dc::Dist& dist, bool allocate) override {
-    dc::MPIRootPrintStreamInfo() << "split_distconv_layer:: setup_activations";
     const auto &parent_activations =
         dynamic_cast<const TensorDevType&>(this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
-    this->m_outputs.emplace_back(make_unique<TensorDevType>(parent_activations));
+    for (int i = 0; i < this->layer().get_num_children(); ++i) {
+      this->m_outputs.emplace_back(make_unique<TensorDevType>(parent_activations));
+    }
   }
 };
 

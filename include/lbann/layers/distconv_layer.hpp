@@ -47,6 +47,7 @@ public:
   virtual const Layer& layer() const;
   std::string get_name() const;
 
+  virtual void setup_prev_activations(const dc::Dist& dist) = 0;
   virtual void setup_activations(const dc::Dist& dist, bool allocate=true) = 0;
 
  private:

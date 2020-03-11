@@ -41,40 +41,29 @@ public:
   virtual ~data_type_distconv_layer() = default;
 
   /** Get activation tensor corresponding to child layer. */
-  const TensorDevType& get_activations(const Layer& child) const override {
-    if (layer().get_num_children() == 0) {
-      LBANN_ERROR("This layer has no children");
-    }
-    const int child_index = layer().find_child_layer_index(&child);
-    if (child_index >= layer().get_num_children()) {
-      LBANN_ERROR("attempted to get activation tensor of ",
-                  "layer \"", get_name(), "\" ",
-                  "corresponding to layer\"", child.get_name(), "\", ",
-                  "which is not a child layer");
-    }
-    return get_activations(child_index);
-  }
+  const TensorDevType& get_activations(const Layer& child) const override;
 
   /** Get activation tensor. */
-  const TensorDevType& get_activations(int child_index = 0) const {
-    if (child_index < 0 || child_index >= (int) m_outputs.size()) {
-      LBANN_ERROR("attempted to access invalid distconv activation tensor ",
-                  "from ", get_name(), " ",
-                  "(requested index ", child_index, ", but there are ",
-                  m_outputs.size(), " activation tensors)");
-    }
-    return *m_outputs[child_index];
-  }
-  TensorDevType& get_activations(int child_index = 0) {
-    return const_cast<TensorDevType&>(
-        static_cast<const data_type_distconv_layer<TensorDataType>&>(*this).get_activations(child_index));
-  }
+  const TensorDevType& get_activations(int child_index = 0) const;
+  TensorDevType& get_activations(int child_index = 0);
 
+  /** Get previous activation tensor. */
+  const TensorDevType& get_prev_activations(int parent_index = 0) const;
+  TensorDevType& get_prev_activations(int parent_index = 0);
+  /** Get original previous activation tensor. */
+  const TensorDevType& get_original_prev_activations(int parent_index = 0) const;
+  /** Get original previous activation tensor. */
+  TensorDevType& get_original_prev_activations(int parent_index = 0);
+
+  void setup_prev_activations(const dc::Dist& dist) override;
   void setup_activations(const dc::Dist& dist, bool allocate=true) override;
 
  protected:
+  std::vector<std::unique_ptr<TensorDevType>> m_inputs;
+  std::vector<std::unique_ptr<TensorDevType>> m_original_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_outputs;
 
+  dc::Shape get_input_tensor_shape(int input_index=0) const;
   dc::Shape get_output_tensor_shape(int output_index=0) const;
   dc::Shape get_activations_tensor_local_shape() const;
 };

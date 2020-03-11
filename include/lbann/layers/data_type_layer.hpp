@@ -406,10 +406,6 @@ private:
   void dump_reference_error_signals();
 
  private:
-  /** Previous activation tensor */
-  TensorDevType m_prev_activations_t;
-  /** View to Elemental matrix of previous activations */
-  TensorDevType m_prev_activations_const_view;
   /** Elemental-format activation matrix */
   TensorDevType m_activations_copyout;
   /** Previous error signal tensor */

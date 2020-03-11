@@ -1012,30 +1012,27 @@ int data_type_layer<TensorDataType>::get_num_spatial_dims() const {
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::
 get_prev_activations_t() const {
-  return m_prev_activations_t;
+  return dc().get_prev_activations();
 }
 
 template <typename TensorDataType>
 typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_prev_activations_t() {
-  return m_prev_activations_t;
+  return dc().get_prev_activations();
 }
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_prev_activations_const_view() const {
-  return m_prev_activations_const_view;
+  return dc().get_original_prev_activations();
 }
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t() const {
-  //return m_activations_t;
   return dc().get_activations();
 }
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType& data_type_layer<TensorDataType>::get_activations_t(
     const Layer &child) const {
-  //assert_always(get_num_children() == 1);
-  //return m_activations_t;
   return dc().get_activations(child);
 }
 
@@ -1108,6 +1105,8 @@ const dc::Shape data_type_layer<TensorDataType>::get_output_tensor_shape(
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_prev_activations_tensor(
     const std::array<dc::Dist, dc::num_dists> &dists) {
+  dc().setup_prev_activations(dists[0]);
+#if 0
   const auto input_tensor_shape = get_input_tensor_shape();
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(get_num_dims());
@@ -1145,11 +1144,12 @@ void data_type_layer<TensorDataType>::setup_prev_activations_tensor(
   }
   dc::MPIPrintStreamDebug() << get_name() << "; "
                             << "prev activations: " << m_prev_activations_t;
+#endif
 }
 
 template <typename TensorDataType>
 dc::Shape data_type_layer<TensorDataType>::get_activations_tensor_local_shape() const {
-  return m_prev_activations_t.get_local_shape();
+  return dc().get_prev_activations().get_local_shape();
 }
 
 template <typename TensorDataType>
@@ -1253,7 +1253,7 @@ void data_type_layer<TensorDataType>::setup_error_signals_tensor(
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   m_error_signals_t = TensorDevType(input_tensor_shape, loc,
                                     dists[2],
-                                    m_prev_activations_t.get_local_shape());
+                                    dc().get_prev_activations().get_local_shape());
   if (skip_first_layer_bp()) {
     dc::MPIPrintStreamDebug()
         << get_name() << ": skipping allocation of error signals";
@@ -1291,55 +1291,55 @@ void data_type_layer<TensorDataType>::setup_error_signals_copyout_tensor(
 namespace {
 template <typename TensorDataType>
 dc::TensorShuffler<TensorDataType> *get_shuffler(Layer *layer,
-                                                 dc::TensorShuffler<TensorDataType> *main_shuffler,
+                                                 dc::TensorShuffler<TensorDataType> *&main_shuffler,
                                                  dc::TensorShuffler<TensorDataType> **last_mb_shufflers,
                                                  const dc::TensorDev<TensorDataType> &src,
                                                  const dc::TensorDev<TensorDataType> &dst) {
-  dc::TensorShuffler<TensorDataType> *shuffler = nullptr;
+  dc::TensorShuffler<TensorDataType> **shuffler = nullptr;
   const auto& c = static_cast<sgd_execution_context&>(
       layer->get_model()->get_execution_context());
   const auto& mini_batch_size = c.get_current_mini_batch_size();
   if (layer->get_model()->get_max_mini_batch_size() == mini_batch_size) {
-    shuffler = main_shuffler;
+    shuffler = &main_shuffler;
   } else {
     // The last remaining mini-batches for the train, validation, and
     // testing modes
     auto mode = layer->get_model()->get_execution_context().get_execution_mode();
     auto shfl_idx = static_cast<int>(mode);
     assert_always(shfl_idx >= 0 && shfl_idx < 3);
-    if (last_mb_shufflers[shfl_idx] == nullptr) {
-      last_mb_shufflers[shfl_idx] = dc::get_tensor_shuffler(src, dst);
-    }
-    shuffler = last_mb_shufflers[shfl_idx];
+    shuffler = &last_mb_shufflers[shfl_idx];
   }
-  return shuffler;
+  if (*shuffler == nullptr) {
+    *shuffler = dc::get_tensor_shuffler(src, dst);
+  }
+  return *shuffler;
 }
 } // namespace
 
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::ensure_prev_activations() {
   for (int i = 0; i < get_num_parents(); ++i) {
-    if (!(m_parent_copy_in_required[i] || m_parent_shuffle_required[i])) {
+    if (!(parent_copy_in_required(i) || parent_shuffle_required(i))) {
       continue;
     }
     if (i != 0) {
       LBANN_ERROR("Distconv assumes non-first tensors are available as distconv tensors");
     }
-    if (m_parent_copy_in_required[i]) {
+    if (parent_copy_in_required(i)) {
       dc::MPIPrintStreamDebug()
           << "Copying previous activations from sample decomposition";
       assert0(dc::tensor::View(
-          m_prev_activations_const_view,
+          dc().get_original_prev_activations(),
           get_prev_activations().LockedBuffer()));
     }
     auto *shuffler = get_shuffler(this, m_prev_activations_shuffler,
                                   m_prev_activations_shuffler_last_mb,
-                                  m_prev_activations_const_view,
-                                  m_prev_activations_t);
+                                  dc().get_original_prev_activations(),
+                                  dc().get_prev_activations());
     assert_always(shuffler != nullptr);
     shuffler->shuffle_forward(
-        m_prev_activations_const_view.get_const_base_ptr(),
-        m_prev_activations_t.get_base_ptr(),
+        dc().get_original_prev_activations().get_const_base_ptr(),
+        dc().get_prev_activations().get_base_ptr(),
         El::GPUManager::Stream());
   }
   this->m_model->clock_start();
@@ -1348,7 +1348,7 @@ void data_type_layer<TensorDataType>::ensure_prev_activations() {
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::copy_out_activations() {
   for (int i = 0; i < get_num_children(); ++i) {
-    if (!m_child_copy_out_required[i]) continue;
+    if (!child_copy_out_required(i)) continue;
 
     if (i != 0) LBANN_ERROR("Copyout of non-first tensor not supported");
 
@@ -1372,13 +1372,13 @@ void data_type_layer<TensorDataType>::copy_out_activations() {
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::ensure_prev_error_signals() {
   for (int i = 0; i < get_num_children(); ++i) {
-    if (!(m_child_copy_out_required[i] || m_child_shuffle_required[i])) {
+    if (!(child_copy_out_required(i) || child_shuffle_required(i))) {
       continue;
     }
 
     if (i != 0) LBANN_ERROR("Copyin non-first tensor not supported");
 
-    if (m_child_copy_out_required[i]) {
+    if (child_copy_out_required(i)) {
       dc::MPIPrintStreamDebug()
           << "Copying previous error signals from sample decomposition";
       assert0(dc::tensor::View(
@@ -1515,17 +1515,17 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
 
   // Reconfigure the sample dimension as the mini batch size may vary
   // at the end of epoch
-  m_prev_activations_t.set_outermost_dimension(mini_batch_size);
-  assert_eq((int)m_prev_activations_t.get_shape()[-1],
+  dc().get_prev_activations().set_outermost_dimension(mini_batch_size);
+  assert_eq((int)dc().get_prev_activations().get_shape()[-1],
             mini_batch_size);
   for (int i = 0; i < get_num_parents(); ++i) {
     if (m_parent_copy_in_required[i] || m_parent_shuffle_required[i]) {
       if (i != 0) {
         LBANN_ERROR("Copyin non-first tensor not supported");
       }
-      m_prev_activations_const_view.set_outermost_dimension(
+      dc().get_original_prev_activations().set_outermost_dimension(
           mini_batch_size);
-      assert_eq((int)m_prev_activations_const_view.get_shape()[-1],
+      assert_eq((int)dc().get_original_prev_activations().get_shape()[-1],
                 mini_batch_size);
       if (m_parent_copy_in_required[i]) {
         // then, parent is assumed to be data parallel, so the local
@@ -1533,9 +1533,9 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
         // the local width of previous activations. The check only
         // matters for split root processes as the rest just hold
         // invalid copy of the root data.
-        if (m_prev_activations_const_view.is_split_root()) {
+        if (dc().get_original_prev_activations().is_split_root()) {
           assert_eq(
-              (int)m_prev_activations_const_view.get_local_shape()[-1],
+              (int)dc().get_original_prev_activations().get_local_shape()[-1],
               get_prev_activations().LocalWidth());
         }
       }

@@ -678,13 +678,9 @@ private:
 
     dc::MPIPrintStreamDebug()
         << "Pooling (" << this->get_name() << "): "
-        << "prev_activations_const_view: " << this->get_prev_activations_const_view()
-        << ", prev_activations_t: " << this->get_prev_activations_t()
-        << ", activations_copyout: " << this->get_activations_copyout()
+        << "prev_activations_t: " << this->get_prev_activations_t()
         << ", activations_t: " << this->get_activations_t()
-        << ", prev_error_signals_const_view: " << this->get_prev_error_signals_const_view()
         << ", prev_error_signals_t: " << this->get_prev_error_signals_t()
-        << ", error_signals_copyout: " << this->get_error_signals_copyout()
         << ", error_signals_t: " << this->get_error_signals_t();
 
     m_pooling->setup(this->get_prev_activations_t(),
