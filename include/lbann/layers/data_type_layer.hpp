@@ -33,6 +33,7 @@
 #include "lbann/utils/h2_tmp.hpp"
 
 #ifdef LBANN_HAS_DISTCONV
+#include "lbann/layers/data_type_distconv_layer.hpp"
 #include <set>
 #include <map>
 #include <array>
@@ -320,10 +321,15 @@ private:
   std::vector<std::unique_ptr<AbsDistMatrixType>> m_gradient_wrt_inputs;
 
 #ifdef LBANN_HAS_DISTCONV
+  friend class data_type_distconv_layer<TensorDataType>;
  public:
-
   using TensorDevType = dc::TensorDev<TensorDataType>;
   using TensorShufflerType = dc::TensorShuffler<TensorDataType>;
+
+  bool using_distconv() const override;
+
+  data_type_distconv_layer<TensorDataType>& dc() override;
+  const data_type_distconv_layer<TensorDataType>& dc() const override;
 
   void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
@@ -355,8 +361,8 @@ private:
   virtual TensorDevType &get_error_signals_copyout();
 
  protected:
-  bool using_distconv() const override;
   void setup_distconv() override;
+  void setup_distconv_layer() override;
 
   virtual int get_num_dims() const;
   virtual int get_num_spatial_dims() const;
@@ -404,8 +410,6 @@ private:
   TensorDevType m_prev_activations_t;
   /** View to Elemental matrix of previous activations */
   TensorDevType m_prev_activations_const_view;
-  /** Activation tensor */
-  TensorDevType m_activations_t;
   /** Elemental-format activation matrix */
   TensorDevType m_activations_copyout;
   /** Previous error signal tensor */

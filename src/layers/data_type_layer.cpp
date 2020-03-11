@@ -733,6 +733,23 @@ void data_type_layer<TensorDataType>::setup_distconv() {
   setup_keep_original_tensors();
   setup_data();
   if (using_gpus()) { setup_gpu(); }
+  setup_distconv_layer();
+}
+
+template <typename TensorDataType>
+void data_type_layer<TensorDataType>::setup_distconv_layer() {
+  this->get_dc() = make_unique<data_type_distconv_layer<TensorDataType>>(*this);
+}
+
+template <typename TensorDataType>
+data_type_distconv_layer<TensorDataType>& data_type_layer<TensorDataType>::dc() {
+  return const_cast<data_type_distconv_layer<TensorDataType>&>(
+      static_cast<const data_type_layer<TensorDataType>&>(*this).dc());
+}
+
+template <typename TensorDataType>
+const data_type_distconv_layer<TensorDataType>& data_type_layer<TensorDataType>::dc() const {
+  return dynamic_cast<const data_type_distconv_layer<TensorDataType>&>(*get_dc());
 }
 
 template <typename TensorDataType>
@@ -1010,19 +1027,21 @@ const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<T
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t() const {
-  return m_activations_t;
+  //return m_activations_t;
+  return dc().get_activations();
 }
 
 template <typename TensorDataType>
-const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t(
+const typename data_type_layer<TensorDataType>::TensorDevType& data_type_layer<TensorDataType>::get_activations_t(
     const Layer &child) const {
-  assert_always(get_num_children() == 1);
-  return m_activations_t;
+  //assert_always(get_num_children() == 1);
+  //return m_activations_t;
+  return dc().get_activations(child);
 }
 
 template <typename TensorDataType>
 typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t() {
-  return m_activations_t;
+  return dc().get_activations();
 }
 
 template <typename TensorDataType>
@@ -1136,6 +1155,8 @@ dc::Shape data_type_layer<TensorDataType>::get_activations_tensor_local_shape() 
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_activations_tensor(
     const std::array<dc::Dist, dc::num_dists> &dists, bool allocate) {
+  dc().setup_activations(dists[1], allocate);
+#if 0
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const dc::Shape output_tensor_shape = get_output_tensor_shape();
   const auto activations_local_shape =
@@ -1146,6 +1167,7 @@ void data_type_layer<TensorDataType>::setup_activations_tensor(
     assert0(m_activations_t.allocate());
     m_activations_t.zero(dc::get_stream());
   }
+#endif
 }
 
 template <typename TensorDataType>
@@ -1153,7 +1175,7 @@ void data_type_layer<TensorDataType>::setup_activations_copyout_tensor(
     const std::array<dc::Dist, dc::num_dists> &dists) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(get_num_dims());
-  const auto output_tensor_shape = m_activations_t.get_shape();
+  const auto output_tensor_shape = dc().get_activations().get_shape();
   assert_always(!output_tensor_shape.is_empty());
   auto output_local_shape = output_tensor_shape;
   // Set the sample dimension as 0 so that its actual value is
@@ -1167,14 +1189,12 @@ void data_type_layer<TensorDataType>::setup_activations_copyout_tensor(
         LBANN_ERROR("Copyout of non-first tensor not supported yet");
       }
       m_activations_shuffler = dc::get_tensor_shuffler(
-          m_activations_t, m_activations_copyout);
+          dc().get_activations(), m_activations_copyout);
       for (int mode = 0; mode < 3; ++mode) {
         m_activations_shuffler_last_mb[mode] = nullptr;
       }
     }
   }
-  dc::MPIPrintStreamDebug() << get_name() << "; "
-                            << "activations: " << m_activations_t;
 }
 
 template <typename TensorDataType>
@@ -1182,7 +1202,7 @@ void data_type_layer<TensorDataType>::setup_prev_error_signals_tensor(
     const std::array<dc::Dist, dc::num_dists> &dists) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(get_num_dims());
-  const auto output_tensor_shape = m_activations_t.get_shape();
+  const auto output_tensor_shape = dc().get_activations().get_shape();
   assert_always(!output_tensor_shape.is_empty());
   auto output_local_shape = output_tensor_shape;
   // Set the sample dimension as 0 so that its actual value is
@@ -1203,7 +1223,7 @@ void data_type_layer<TensorDataType>::setup_prev_error_signals_tensor(
       }
       m_prev_error_signals_t = TensorDevType(output_tensor_shape, loc,
                                              dists[3],
-                                             m_activations_t.get_local_shape());
+                                             dc().get_activations().get_local_shape());
       assert0(m_prev_error_signals_t.allocate());
       m_prev_error_signals_t.zero(dc::get_stream());
       m_prev_error_signals_shuffler = dc::get_tensor_shuffler(
@@ -1340,10 +1360,10 @@ void data_type_layer<TensorDataType>::copy_out_activations() {
         m_activations_copyout, get_activations().Buffer()));
     auto *shuffler = get_shuffler(this, m_activations_shuffler,
                                   m_activations_shuffler_last_mb,
-                                  m_activations_t, m_activations_copyout);
+                                  dc().get_activations(), m_activations_copyout);
     assert_always(shuffler != nullptr);
     shuffler->shuffle_forward(
-        m_activations_t.get_const_base_ptr(),
+        dc().get_activations().get_const_base_ptr(),
         m_activations_copyout.get_base_ptr(),
         El::GPUManager::Stream());
   }
@@ -1521,8 +1541,8 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
       }
     }
   }
-  m_activations_t.set_outermost_dimension(mini_batch_size);
-  assert_eq((int)m_activations_t.get_shape()[-1],
+  dc().get_activations().set_outermost_dimension(mini_batch_size);
+  assert_eq((int)dc().get_activations().get_shape()[-1],
             mini_batch_size);
   m_activations_copyout.set_outermost_dimension(mini_batch_size);
   assert_eq((int)m_activations_copyout.get_shape()[-1],
@@ -1607,7 +1627,7 @@ size_t data_type_layer<TensorDataType>::estimate_memory_usage(
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::dump_activations() const {
   dc::dump_tensor(early_terminate_last_iteration(),
-                  m_activations_t, get_name() + "_activations");
+                  dc().get_activations(), get_name() + "_activations");
 }
 
 template <typename TensorDataType>

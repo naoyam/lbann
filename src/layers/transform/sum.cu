@@ -95,7 +95,7 @@ template <typename TensorDataType, data_layout Layout, El::Device Dev>
 void sum_layer<TensorDataType, Layout, Dev>::fp_compute() {
 #ifdef LBANN_HAS_DISTCONV
   if (this->distconv_enabled()) {
-    fp_compute_distconv(this->get_activations_t(),
+    fp_compute_distconv(this->dc().get_activations(),
                         this->get_prev_activations_t(),
                         m_prev_activations_siblings, this->get_num_parents());
     this->copy_out_activations();
