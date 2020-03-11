@@ -45,10 +45,16 @@ public:
 
   /** Get activation tensor. */
   const TensorDevType& get_activations(int child_index = 0) const;
+  /** Get activation tensor. */
   TensorDevType& get_activations(int child_index = 0);
+  /** Get original activation tensor. */
+  const TensorDevType& get_original_activations(int child_index = 0) const;
+  /** Get original activation tensor. */
+  TensorDevType& get_original_activations(int child_index = 0);
 
   /** Get previous activation tensor. */
   const TensorDevType& get_prev_activations(int parent_index = 0) const;
+  /** Get previous activation tensor. */
   TensorDevType& get_prev_activations(int parent_index = 0);
   /** Get original previous activation tensor. */
   const TensorDevType& get_original_prev_activations(int parent_index = 0) const;
@@ -58,11 +64,13 @@ public:
   void setup_prev_activations(const dc::Dist& dist) override;
   void setup_original_prev_activations() override;
   void setup_activations(const dc::Dist& dist, bool allocate=true) override;
+  void setup_original_activations() override;
 
  protected:
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_original_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_outputs;
+  std::vector<std::unique_ptr<TensorDevType>> m_original_outputs;
 
   dc::Shape get_input_tensor_shape(int input_index=0) const;
   dc::Shape get_output_tensor_shape(int output_index=0) const;

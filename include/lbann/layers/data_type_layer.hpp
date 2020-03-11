@@ -407,7 +407,7 @@ private:
 
  private:
   /** Elemental-format activation matrix */
-  TensorDevType m_activations_copyout;
+  //TensorDevType m_activations_copyout;
   /** Previous error signal tensor */
   TensorDevType m_prev_error_signals_t;
   /** View to Elemental matrix */
@@ -421,13 +421,13 @@ private:
   std::vector<bool> m_child_copy_out_required;
   std::vector<bool> m_child_shuffle_required;
   TensorShufflerType *m_prev_activations_shuffler = nullptr;
-  TensorShufflerType *m_prev_activations_shuffler_last_mb[3];
+  TensorShufflerType *m_prev_activations_shuffler_last_mb[3] = {nullptr, nullptr, nullptr};
   TensorShufflerType *m_activations_shuffler = nullptr;
-  TensorShufflerType *m_activations_shuffler_last_mb[3];
+  TensorShufflerType *m_activations_shuffler_last_mb[3] = {nullptr, nullptr, nullptr};
   TensorShufflerType *m_prev_error_signals_shuffler = nullptr;
-  TensorShufflerType *m_prev_error_signals_shuffler_last_mb[3];
+  TensorShufflerType *m_prev_error_signals_shuffler_last_mb[3] = {nullptr, nullptr, nullptr};
   TensorShufflerType *m_error_signals_shuffler = nullptr;
-  TensorShufflerType *m_error_signals_shuffler_last_mb[3];
+  TensorShufflerType *m_error_signals_shuffler_last_mb[3] = {nullptr, nullptr, nullptr};
   std::vector<bool> m_keep_original_input;
   std::vector<bool> m_keep_original_output;
 
