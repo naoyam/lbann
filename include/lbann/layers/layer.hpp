@@ -577,25 +577,27 @@ private:
   friend std::vector<weights*> extract_weights(Layer& l);
 
 #ifdef LBANN_HAS_DISTCONV
+ protected:
+  /** Indicate whether distconv is supported. */
+  virtual bool is_distconv_supported() const { return true; }
  public:
-  /** Indicate whether distconv should be enabled in this layer. */
-  virtual bool using_distconv() const = 0;
+  /** Enables distconv. */
   void enable_distconv();
+  /** Indicate whether distconv is enabled. */
+  bool distconv_enabled() const;
   virtual void setup_distconv() = 0;
-  /** Indicate whether distconv is enabled in this layer. */
-  bool distconv_enabled() const { return m_distconv_enabled; }
   /** Get the parallel strategy for the layer. */
   ParallelStrategy& get_parallel_strategy() { return m_parallel_strategy; }
   const ParallelStrategy& get_parallel_strategy() const { return m_parallel_strategy; }
 
   virtual void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) = 0;
-  virtual void setup_tensor_distribution_add_adjacent_invariants(
+      std::set<dc::Dist*> &invariants) = 0;
+  virtual void setup_tensor_distribution_add_adjacent_equivalence(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants) = 0;
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents);
 
   virtual void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) = 0;
   virtual void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) = 0;

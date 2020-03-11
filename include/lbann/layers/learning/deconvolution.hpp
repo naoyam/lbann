@@ -215,11 +215,11 @@ protected:
  public:
   void init_distribution(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override {
+      std::set<dc::Dist*> &invariants) override {
     base_convolution_layer<TensorDataType, Device>::init_distribution(
-        dists, invariants, updated, fixed);
+        dists, equivalents, updated, invariants);
     if (!this->distconv_enabled()) return;
     auto &prev_activations_dist = dists[this][0];
     auto &activations_dist = dists[this][1];
@@ -230,19 +230,19 @@ protected:
     // prev activations
     prev_activations_dist.set_overlap(overlap);
     updated.insert(&prev_activations_dist);
-    fixed.insert(&prev_activations_dist);
+    invariants.insert(&prev_activations_dist);
     // activations
     activations_dist.set_overlap(overlap);
     updated.insert(&activations_dist);
-    fixed.insert(&activations_dist);
+    invariants.insert(&activations_dist);
     // prev error signals
     prev_error_signals_dist.set_overlap(overlap);
     updated.insert(&prev_error_signals_dist);
-    fixed.insert(&prev_error_signals_dist);
+    invariants.insert(&prev_error_signals_dist);
     // error signals
     error_signals_dist.set_overlap(overlap);
     updated.insert(&error_signals_dist);
-    fixed.insert(&error_signals_dist);
+    invariants.insert(&error_signals_dist);
   }
 
   dc::Shape get_activations_tensor_local_shape() const override {
@@ -293,8 +293,8 @@ protected:
   }
 
  protected:
-  bool using_distconv() const override {
-    if (!base_convolution_layer<TensorDataType, Device>::using_distconv()) return false;
+  bool is_distconv_supported() const override {
+    if (!base_convolution_layer<TensorDataType, Device>::is_distconv_supported()) return false;
 
     const auto& kernel_dims = get_kernel_dims();
     for(int i = 0; i < this->get_num_spatial_dims(); i++) {

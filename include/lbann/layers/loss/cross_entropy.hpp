@@ -80,7 +80,18 @@ public:
     this->set_output_dims({1});
 
 #ifdef LBANN_HAS_DISTCONV
-    if (this->using_distconv()) {
+    // In the current implementation of cross entropy in Distconv, we
+    // do not use the reshape layer and just assumes both inputs have
+    // the matching shape. Therefore, the following check on the input
+    // dimensions would fail. We could address this by either 1)
+    // implementing the reshape layer, or 2) giving a proper shape to
+    // the ground-truth data.
+    //
+    // Furthermore, we need to call enable_distconv() here since it it
+    // isnot yet called at this point. It will be called again, but
+    // that won't be harmful.
+    this->enable_distconv();
+    if (this->distconv_enabled()) {
       return;
     }
 #endif
@@ -225,11 +236,11 @@ private:
  public:
   void init_distribution(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override {
+      std::set<dc::Dist*> &invariants) override {
     data_type_layer<TensorDataType>::init_distribution(
-        dists, invariants, updated, fixed);
+        dists, equivalents, updated, invariants);
     if (!this->distconv_enabled()) return;
 
     // Output tensors share all dimensions except for the sample dimension
@@ -248,7 +259,7 @@ private:
       auto &dist = dists[this][i];
       dist.set_overlap(no_overlap);
       updated.insert(&dist);
-      fixed.insert(&dist);
+      invariants.insert(&dist);
     }
   }
 

@@ -568,11 +568,11 @@ private:
  public:
   void init_distribution(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override {
+      std::set<dc::Dist*> &invariants) override {
     data_type_layer<TensorDataType>::init_distribution(
-        dists, invariants, updated, fixed);
+        dists, equivalents, updated, invariants);
     if (this->distconv_enabled()) {
       dc::IntVector overlap(this->get_num_dims(), 0);
       const auto &ps = this->get_parallel_strategy();
@@ -601,18 +601,18 @@ private:
       auto &prev_error_signals_dist = dists[this][3];
       prev_activations_dist.set_overlap(overlap);
       updated.insert(&prev_activations_dist);
-      fixed.insert(&prev_activations_dist);
+      invariants.insert(&prev_activations_dist);
       // cudnnPoolingBackward requires activations and
       // prev_error_signals must have the same stride
-      invariants[&activations_dist].insert(
+      equivalents[&activations_dist].insert(
           &prev_error_signals_dist);
-      invariants[&prev_error_signals_dist].insert(
+      equivalents[&prev_error_signals_dist].insert(
           &activations_dist);
       // cudnnPoolingBackward requires prev_activations and
       // error_signals must have the same stride
-      invariants[&error_signals_dist].insert(
+      equivalents[&error_signals_dist].insert(
           &prev_activations_dist);
-      invariants[&prev_activations_dist].insert(
+      equivalents[&prev_activations_dist].insert(
           &error_signals_dist);
     }
   }
@@ -698,8 +698,8 @@ private:
  protected:
   dc::Pooling<TensorDataType> *m_pooling;
 
-  bool using_distconv() const override {
-    if (!transform_layer<TensorDataType>::using_distconv()) return false;
+  bool is_distconv_supported() const override {
+    if (!transform_layer<TensorDataType>::is_distconv_supported()) return false;
 
     bool cond = true;
     for(int i = 0; i < this->get_num_spatial_dims(); i++) {

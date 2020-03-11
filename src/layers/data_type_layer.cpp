@@ -677,57 +677,8 @@ void data_type_layer<TensorDataType>::bp_setup_gradient_wrt_inputs(El::Int mini_
 
 #ifdef LBANN_HAS_DISTCONV
 template <typename TensorDataType>
-bool data_type_layer<TensorDataType>::using_distconv() const {
-  // Distconv is disabled if no parallel strategy is defined. When no
-  // strategy is defined, the layer has the default strategy of all
-  // zeros, which is invalid, thus should not be used when distconv is
-  // used.
-  const auto &ps = get_parallel_strategy();
-  ParallelStrategy default_zero_ps;
-  if (ps == default_zero_ps) {
-    dc::MPIRootPrintStreamDebug()
-        << "Disable " << get_name()
-        << " as it does not have a parallel strategy.";
-    return false;
-  }
-
-  // When DISTCONV_ENABLE is defined, all layers included in the
-  // variable are enabled.
-  char *env = getenv("DISTCONV_ENABLE");
-  if (env) {
-    std::string s(env);
-    auto layer_names = dc::util::split(s, ',');
-    for (const auto &name: layer_names) {
-      if (get_name() == name) {
-        return true;
-      }
-    }
-    dc::MPIRootPrintStreamInfo()
-        << "Disable " << get_name()
-        << " as its name is not found in DISTCONV_ENABLE";
-    return false;
-  }
-
-  // It is also disabled when the layer name is included in
-  // an environment variable
-  env = std::getenv("DISTCONV_DISABLE");
-  if (env) {
-    std::string s(env);
-    auto layer_names = dc::util::split(s, ',');
-    for (const auto &name: layer_names) {
-      if (get_name() == name) {
-        dc::MPIRootPrintStreamInfo()
-            << "Disable " << get_name()
-            << " as its name found in DISTCONV_DISABLE";
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_distconv() {
+  // enable_distconv() is assumed to have beeen done already.
   setup_early_termination();
   setup_inter_layer_adaptation();
   setup_keep_original_tensors();
@@ -738,9 +689,9 @@ void data_type_layer<TensorDataType>::setup_distconv() {
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::init_distribution(
     std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-    std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+    std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
     std::set<dc::Dist*> &updated,
-    std::set<dc::Dist*> &fixed) {
+    std::set<dc::Dist*> &invariants) {
   if (!distconv_enabled()) return;
   const int num_dims = get_num_dims();
   auto &ps = get_parallel_strategy();
@@ -847,65 +798,10 @@ void data_type_layer<TensorDataType>::init_distribution(
                                                      error_signals_dist,
                                                      prev_error_signals_dist};
   dists.insert(std::make_pair(this, layer_dists));
-  invariants.insert(std::make_pair(&dists[this][0], std::set<dc::Dist*>()));
-  invariants.insert(std::make_pair(&dists[this][1], std::set<dc::Dist*>()));
-  invariants.insert(std::make_pair(&dists[this][2], std::set<dc::Dist*>()));
-  invariants.insert(std::make_pair(&dists[this][3], std::set<dc::Dist*>()));
-}
-
-template <typename TensorDataType>
-void data_type_layer<TensorDataType>::setup_tensor_distribution_add_adjacent_invariants(
-    std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-    std::map<dc::Dist*, std::set<dc::Dist*>> &invariants) {
-  if (!distconv_enabled()) return;
-  auto &layer_dists = dists[this];
-  const auto &ps = get_parallel_strategy();
-
-  // TEMPORARY HACK. Each tensor should be able to have its own
-  // distribution, however, the current design only allows for a
-  // single distribution for all output tensors in each layer,
-  // meaning the data and label tensors need to have the same
-  // distribution. The data tensor is likely to have halo as the
-  // next layer will be convolution, whereas the label won't need to
-  // have halo. For now, ignore the child layer for the label data.
-
-  if (dynamic_cast<const generic_input_layer<TensorDataType>*>(this)) {
-    const auto &child =  get_child_layers()[0];
-    if (child->distconv_enabled() &&
-        child->get_parallel_strategy() == ps) {
-      invariants[&layer_dists[1]].insert(
-          &dists[child][0]);
-      invariants[&layer_dists[3]].insert(
-          &dists[child][2]);
-    }
-  } else {
-    for (auto &child: get_child_layers()) {
-      if (child->distconv_enabled() &&
-          child->get_parallel_strategy() == ps) {
-        invariants[&layer_dists[1]].insert(
-            &dists[child][0]);
-        invariants[&layer_dists[3]].insert(
-            &dists[child][2]);
-      }
-    }
-  }
-  for (auto &parent: get_parent_layers()) {
-    if (dynamic_cast<const generic_input_layer<TensorDataType>*>(parent)) {
-      const int child_index = std::find(
-          parent->get_child_layers().begin(),
-          parent->get_child_layers().end(),
-          this) - parent->get_child_layers().begin();
-      if (child_index == 1) continue;
-      assert_eq(child_index, 0);
-    }
-    if (parent->distconv_enabled() &&
-        parent->get_parallel_strategy() == ps) {
-      invariants[&layer_dists[0]].insert(
-          &dists[parent][1]);
-      invariants[&layer_dists[2]].insert(
-          &dists[parent][3]);
-    }
-  }
+  equivalents.insert(std::make_pair(&dists[this][0], std::set<dc::Dist*>()));
+  equivalents.insert(std::make_pair(&dists[this][1], std::set<dc::Dist*>()));
+  equivalents.insert(std::make_pair(&dists[this][2], std::set<dc::Dist*>()));
+  equivalents.insert(std::make_pair(&dists[this][3], std::set<dc::Dist*>()));
 }
 
 template <typename TensorDataType>
@@ -1322,7 +1218,6 @@ void data_type_layer<TensorDataType>::ensure_prev_activations() {
         m_prev_activations_t.get_base_ptr(),
         El::GPUManager::Stream());
   }
-  this->m_model->clock_start();
 }
 
 template <typename TensorDataType>
@@ -1331,8 +1226,6 @@ void data_type_layer<TensorDataType>::copy_out_activations() {
     if (!m_child_copy_out_required[i]) continue;
 
     if (i != 0) LBANN_ERROR("Copyout of non-first tensor not supported");
-
-    this->m_model->clock_end();
 
     dc::MPIPrintStreamDebug()
         << "Copying activations back to sample decomposition";

@@ -327,12 +327,9 @@ private:
 
   void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override;
-  void setup_tensor_distribution_add_adjacent_invariants(
-      std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants) override;
+      std::set<dc::Dist*> &invariants) override;
 
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {}
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {}
@@ -355,7 +352,6 @@ private:
   virtual TensorDevType &get_error_signals_copyout();
 
  protected:
-  bool using_distconv() const override;
   void setup_distconv() override;
 
   virtual int get_num_dims() const;

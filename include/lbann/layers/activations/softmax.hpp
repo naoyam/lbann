@@ -178,11 +178,11 @@ private:
  public:
   void init_distribution(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override {
+      std::set<dc::Dist*> &invariants) override {
     data_type_layer<TensorDataType>::init_distribution(
-        dists, invariants, updated, fixed);
+        dists, equivalents, updated, invariants);
     if (!this->distconv_enabled()) return;
 
     // No overlap supported yet
@@ -191,7 +191,7 @@ private:
       auto &dist = dists[this][i];
       dist.set_overlap(no_overlap);
       updated.insert(&dist);
-      fixed.insert(&dist);
+      invariants.insert(&dist);
     }
   }
 

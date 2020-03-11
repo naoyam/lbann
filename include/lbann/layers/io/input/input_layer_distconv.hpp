@@ -78,7 +78,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     // copies the label data as well when the second child layer is
     // also enabled for distconv
     if (this->get_num_children() == 2 &&
-        this->get_child_layers()[1]->using_distconv()) {
+        this->get_child_layers()[1]->distconv_enabled()) {
       m_copy_labels_dc = true;
       dc::MPIRootPrintStreamInfo() << "Copy label/response data to Distconv as well";
     }

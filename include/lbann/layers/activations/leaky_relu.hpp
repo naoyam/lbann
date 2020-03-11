@@ -83,9 +83,9 @@ private:
  public:
   void init_distribution(
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &fixed) override;
+      std::set<dc::Dist*> &invariants) override;
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
 #endif // LBANN_HAS_DISTCONV

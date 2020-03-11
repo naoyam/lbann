@@ -185,23 +185,23 @@ void leaky_relu_layer<TensorDataType, Layout, Device>::bp_compute() {
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 void leaky_relu_layer<TensorDataType, Layout, Device>::init_distribution(
     std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-    std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
+    std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
     std::set<dc::Dist*> &updated,
-    std::set<dc::Dist*> &fixed)  {
+    std::set<dc::Dist*> &invariants)  {
   assert_always(Layout == data_layout::DATA_PARALLEL);
   data_type_layer<TensorDataType>::init_distribution(
-      dists, invariants, updated, fixed);
+      dists, equivalents, updated, invariants);
   if (!this->distconv_enabled()) return;
   auto &layer_dists = dists[this];
   // x == y
-  invariants[&layer_dists[0]].insert(&layer_dists[1]);
-  invariants[&layer_dists[1]].insert(&layer_dists[0]);
+  equivalents[&layer_dists[0]].insert(&layer_dists[1]);
+  equivalents[&layer_dists[1]].insert(&layer_dists[0]);
   // x == dx
-  invariants[&layer_dists[0]].insert(&layer_dists[2]);
-  invariants[&layer_dists[2]].insert(&layer_dists[0]);
+  equivalents[&layer_dists[0]].insert(&layer_dists[2]);
+  equivalents[&layer_dists[2]].insert(&layer_dists[0]);
   // dx == dy
-  invariants[&layer_dists[2]].insert(&layer_dists[3]);
-  invariants[&layer_dists[3]].insert(&layer_dists[2]);
+  equivalents[&layer_dists[2]].insert(&layer_dists[3]);
+  equivalents[&layer_dists[3]].insert(&layer_dists[2]);
 }
 
 template <typename TensorDataType, data_layout Layout, El::Device Device>
