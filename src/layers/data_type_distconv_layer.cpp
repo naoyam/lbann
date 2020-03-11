@@ -67,6 +67,27 @@ data_type_distconv_layer<TensorDataType>::get_activations(int child_index) {
 
 template <typename TensorDataType>
 const typename data_type_distconv_layer<TensorDataType>::TensorDevType&
+data_type_distconv_layer<TensorDataType>::get_original_activations(
+    int child_index) const {
+  if (child_index < 0 || child_index >= (int) m_original_outputs.size()) {
+    LBANN_ERROR("attempted to access invalid original activation tensor ",
+                "from ", get_name(), " ",
+                "(requested index ", child_index, ", but there are ",
+                m_original_outputs.size(), " original activation tensors)");
+  }
+  return *m_original_outputs[child_index];
+}
+
+template <typename TensorDataType>
+typename data_type_distconv_layer<TensorDataType>::TensorDevType&
+data_type_distconv_layer<TensorDataType>::get_original_activations(
+    int child_index) {
+  return const_cast<TensorDevType&>(
+      static_cast<const data_type_distconv_layer<TensorDataType>&>(*this).get_original_activations(child_index));
+}
+
+template <typename TensorDataType>
+const typename data_type_distconv_layer<TensorDataType>::TensorDevType&
 data_type_distconv_layer<TensorDataType>::get_prev_activations(int parent_index) const {
   if (parent_index < 0 || parent_index >= (int) m_inputs.size()) {
     LBANN_ERROR("attempted to access invalid distconv previous activation tensor ",
@@ -208,6 +229,39 @@ void data_type_distconv_layer<TensorDataType>::setup_activations(
     assert0(m_outputs.back()->allocate());
     m_outputs.back()->zero(dc::get_stream());
   }
+}
+
+template <typename TensorDataType>
+void data_type_distconv_layer<TensorDataType>::setup_original_activations() {
+  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+  const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(l.get_num_dims());
+  const auto output_tensor_shape = get_output_tensor_shape();
+  assert_always(!output_tensor_shape.is_empty());
+  auto output_local_shape = output_tensor_shape;
+  // Set the sample dimension as 0 so that its actual value is
+  // calculated by Distconv
+  output_local_shape[-1] = 0;
+
+  m_original_outputs.clear();
+  m_original_outputs.resize(l.get_num_children());
+
+  // Create a original tensor only when copyout is needed. Note that
+  // when the next layer is a distconv layer and has a different
+  // distribution, tensor shuffling is necessary but is done at the
+  // next layer.
+  for (int i = 0; i < l.get_num_children(); ++i) {
+    if (!l.child_copy_out_required(i)) continue;
+    m_original_outputs[i] = make_unique<TensorDevType>(
+        output_tensor_shape, loc, sample_dist, output_local_shape);
+  }
+#if 0
+  m_activations_shuffler = dc::get_tensor_shuffler(
+      dc().get_activations(), m_activations_copyout);
+  for (int mode = 0; mode < 3; ++mode) {
+    m_activations_shuffler_last_mb[mode] = nullptr;
+  }
+#endif
 }
 
 #define PROTO(T)                                \
