@@ -40,4 +40,11 @@ std::string distconv_layer::get_name() const {
   return layer().get_name();
 }
 
+void distconv_layer::setup_fp_tensors(const dc::Dist &input_dist,
+                                      const dc::Dist &output_dist) {
+  setup_original_prev_activations();
+  setup_prev_activations(input_dist);
+  setup_activations(output_dist);
+}
+
 }  // namespace lbann

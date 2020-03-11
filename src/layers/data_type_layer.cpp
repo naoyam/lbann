@@ -1198,6 +1198,14 @@ void data_type_layer<TensorDataType>::setup_activations_copyout_tensor(
 }
 
 template <typename TensorDataType>
+void data_type_layer<TensorDataType>::setup_tensors_fwd(
+    const std::array<dc::Dist, dc::num_dists> &dists) {
+  if (!this->distconv_enabled()) return;
+  this->dc().setup_fp_tensors(dists[0], dists[1]);
+  this->setup_activations_copyout_tensor(dists);
+}
+
+template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_prev_error_signals_tensor(
     const std::array<dc::Dist, dc::num_dists> &dists) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);

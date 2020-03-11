@@ -107,10 +107,6 @@ private:
     data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
 
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-
     m_prev_activations_siblings.reserve(this->get_num_parents() - 1);
     for (int i = 0; i < this->get_num_parents() - 1; ++i) {
       if (this->parent_shuffle_required(i+1) ||

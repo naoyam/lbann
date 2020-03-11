@@ -139,14 +139,6 @@ protected:
     LBANN_ERROR("No such parent found");
   }
 
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    transform_layer<TensorDataType>::setup_tensors_fwd(dists);
-    if (!this->distconv_enabled()) return;
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-  }
-
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
     transform_layer<TensorDataType>::setup_tensors_bwd(dists);
     if (!this->distconv_enabled()) return;

@@ -378,10 +378,6 @@ protected:
     data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
 
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-
     const int num_channels = this->get_output_dims()[0];
     // Sanity check that the shared tensors have the correct shape
     assert_ne(num_channels, 0);

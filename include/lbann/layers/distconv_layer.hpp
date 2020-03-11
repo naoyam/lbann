@@ -42,13 +42,16 @@ public:
   /** Get activation tensor. */
   virtual const dc::AbsTensor& get_activations(const Layer& child) const = 0;
 
+  virtual void setup_prev_activations(const dc::Dist& dist) = 0;
+  virtual void setup_original_prev_activations() = 0;
+  virtual void setup_activations(const dc::Dist& dist, bool allocate=true) = 0;
+  virtual void setup_fp_tensors(const dc::Dist &input_dist,
+                                const dc::Dist &output_dist);
+
  protected:
   virtual Layer& layer();
   virtual const Layer& layer() const;
   std::string get_name() const;
-
-  virtual void setup_prev_activations(const dc::Dist& dist) = 0;
-  virtual void setup_activations(const dc::Dist& dist, bool allocate=true) = 0;
 
  private:
   Layer& m_layer;

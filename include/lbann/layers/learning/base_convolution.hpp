@@ -1263,10 +1263,6 @@ private:
     MPIPrintStreamDebug()
         << "m_kernel_dims: " << ss.str();
 
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-
     // assumes no partitioning on channel/filter dimensions
     assert_eq(dists[0].get_split_shape()[-2], 1);
     auto shared_dist = dc::Dist::make_shared_distribution(

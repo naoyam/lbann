@@ -285,9 +285,6 @@ private:
       override {
     data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
     m_ground_truth_t = dynamic_cast<const data_type_layer<TensorDataType>*>(
         this->get_parent_layers()[1])->get_activations_t(*this);
   }

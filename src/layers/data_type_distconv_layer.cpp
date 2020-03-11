@@ -115,8 +115,7 @@ dc::Shape data_type_distconv_layer<TensorDataType>::get_input_tensor_shape(
 }
 
 template <typename TensorDataType>
-void data_type_distconv_layer<TensorDataType>::setup_prev_activations(
-    const dc::Dist& dist) {
+void data_type_distconv_layer<TensorDataType>::setup_original_prev_activations() {
   auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   const auto input_tensor_shape = get_input_tensor_shape();
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
@@ -127,26 +126,42 @@ void data_type_distconv_layer<TensorDataType>::setup_prev_activations(
   // calculated by Distconv
   input_local_shape[-1] = 0;
 
+  m_original_inputs.clear();
+  m_original_inputs.resize(l.get_num_parents());
+
+  for (int i = 0; i < l.get_num_parents(); ++i) {
+    if (l.parent_copy_in_required(i)) {
+      m_original_inputs[i] = make_unique<TensorDevType>(
+          input_tensor_shape, loc, sample_dist, input_local_shape);
+    } else if (l.parent_shuffle_required(i)) {
+      // NOTE: previous activations are assumed to be of the same
+      // tensor data type.
+      // Create a shallow copy of the activations of the prev layer
+      const auto &parent_activations =
+          dynamic_cast<const TensorDevType&>(
+              l.get_parent_layers()[i]->dc().get_activations(l));
+      m_original_inputs[i] = make_unique<TensorDevType>(
+          parent_activations);
+    }
+  }
+}
+
+template <typename TensorDataType>
+void data_type_distconv_layer<TensorDataType>::setup_prev_activations(
+    const dc::Dist& dist) {
+  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  const auto input_tensor_shape = get_input_tensor_shape();
+  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+
   for (int i = 0; i < l.get_num_parents(); ++i) {
     if (l.parent_copy_in_required(i) || l.parent_shuffle_required(i)) {
       if (i != 0) LBANN_ERROR("Copyin of non-first tensor not supported yet");
-      if (l.parent_copy_in_required(i)) {
-        m_original_inputs.emplace_back(make_unique<TensorDevType>(
-            input_tensor_shape, loc, sample_dist, input_local_shape));
-      } else {
-        // NOTE: previous activations are assumed to be of the same
-        // tensor data type.
-        const auto &parent_activations =
-            dynamic_cast<const TensorDevType&>(
-                l.get_parent_layers()[i]->dc().get_activations(l));
-        m_original_inputs.emplace_back(make_unique<TensorDevType>(
-            parent_activations));
-      }
       m_inputs.emplace_back(make_unique<TensorDevType>(
           input_tensor_shape, loc, dist));
       assert0(m_inputs.back()->allocate());
       m_inputs.back()->zero(dc::get_stream());
     } else {
+      // Create a shallow copy
       const auto &parent_activations =
           dynamic_cast<const TensorDevType&>(
               l.get_parent_layers()[i]->dc().get_activations(l));
@@ -171,7 +186,7 @@ dc::Shape data_type_distconv_layer<TensorDataType>::get_output_tensor_shape(
 
 template <typename TensorDataType>
 dc::Shape data_type_distconv_layer<TensorDataType>::get_activations_tensor_local_shape() const {
-  // TODO: relace the use of layer::get_activations_tensor_local_shape 
+  // TODO: relace the use of layer::get_activations_tensor_local_shape
 #if 0
   const auto &parent_activations = layer().get_parent_layers()[0]->dc().get_activations(layer());
   return parent_activations.get_local_shape();

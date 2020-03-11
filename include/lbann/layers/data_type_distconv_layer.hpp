@@ -56,6 +56,7 @@ public:
   TensorDevType& get_original_prev_activations(int parent_index = 0);
 
   void setup_prev_activations(const dc::Dist& dist) override;
+  void setup_original_prev_activations() override;
   void setup_activations(const dc::Dist& dist, bool allocate=true) override;
 
  protected:

@@ -340,7 +340,7 @@ private:
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
       std::map<dc::Dist*, std::set<dc::Dist*>> &invariants) override;
 
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {}
+  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {}
   void setup_distconv_post(size_t ws_size) override {}
 

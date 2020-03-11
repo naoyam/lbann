@@ -78,7 +78,6 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
     using namespace dc;
-    input_layer<TensorDataType, T_io_buffer, T_layout, Dev>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
 
     // copies the label data as well when the second child layer is

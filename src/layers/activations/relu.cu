@@ -126,17 +126,6 @@ void relu_layer<TensorDataType, Layout, Device>::init_distribution(
 
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 void relu_layer<TensorDataType, Layout, Device>::
-setup_tensors_fwd(const std::array<Dist, dc::num_dists> &dists) {
-  assert_always(Layout == data_layout::DATA_PARALLEL);
-  data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
-  if (!this->distconv_enabled()) return;
-  this->setup_prev_activations_tensor(dists);
-  this->setup_activations_tensor(dists);
-  this->setup_activations_copyout_tensor(dists);
-}
-
-template <typename TensorDataType, data_layout Layout, El::Device Device>
-void relu_layer<TensorDataType, Layout, Device>::
 setup_tensors_bwd(const std::array<Dist, dc::num_dists> &dists)  {
   assert_always(Layout == data_layout::DATA_PARALLEL);
   data_type_layer<TensorDataType>::setup_tensors_bwd(dists);

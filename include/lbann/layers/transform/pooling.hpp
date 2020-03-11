@@ -629,21 +629,6 @@ private:
     return output_spatial_local_shape;
   }
 
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
-    if (!this->distconv_enabled()) return;
-
-    dc::MPIPrintStreamDebug()
-        << "pooling: setup_tensors."
-        << " pads: " << dc::util::join_xd_array(m_pads)
-        << ", pool_dims: " << dc::util::join_xd_array(m_pool_dims)
-        << ", m_strides: " << dc::util::join_xd_array(m_strides);
-
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-  }
-
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
     data_type_layer<TensorDataType>::setup_tensors_bwd(dists);
     if (!this->distconv_enabled()) return;
