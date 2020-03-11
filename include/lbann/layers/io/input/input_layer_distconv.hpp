@@ -70,6 +70,12 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     return this->get_output_dims().size() + 1;
   }
 
+  // No enforced local shape as the activations tensor is always
+  // copied from the El matrix.
+  dc::Shape get_activations_tensor_local_shape() const override {
+    return dc::Shape(get_num_dims(), 0);
+  }
+
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
     using namespace dc;
     input_layer<TensorDataType, T_io_buffer, T_layout, Dev>::setup_tensors_fwd(dists);
@@ -131,13 +137,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
       setup_shuffler_buffers(m_input_host_view, m_input_host_tensor);
     }
 
-    // Layer::setup_activations_tensor does not work as it assumes
-    // prev_activations_tensor is already
-    // setup. prev_activations_tensor is not necessary for input.
-    //const LocaleMPI loc(dc::get_mpi_comm(), false);
-    this->get_activations_t() = TensorDevType(tensor_shape, loc, dist);
-    assert0(this->get_activations_t().allocate());
-    this->get_activations_t().zero(dc::get_stream());
+    this->dc().setup_activations(dists[1]);
 
     // Keeps the same input type and convert to float on GPU
     m_input_dev = TensorDevInput(tensor_shape, loc, dist);

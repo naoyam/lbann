@@ -70,7 +70,7 @@ public:
         static_cast<const data_type_distconv_layer<TensorDataType>&>(*this).get_activations(child_index));
   }
 
-  void setup_activations(const dc::Dist& dist, bool allocate) override;
+  void setup_activations(const dc::Dist& dist, bool allocate=true) override;
 
  protected:
   std::vector<std::unique_ptr<TensorDevType>> m_outputs;
