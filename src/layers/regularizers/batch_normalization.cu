@@ -318,7 +318,7 @@ void batch_normalization_layer<TensorDataType, T_layout, Dev>::fp_compute_distco
       m_running_var_t,
       this->get_data_type_weights(3).get_values().Matrix().Buffer()));
 
-  m_bn->forward_stage1(this->get_prev_activations_t(),
+  m_bn->forward_stage1(this->dc().get_prev_activations(),
                        m_mean_t,
                        m_var_t,
                        is_training);
@@ -332,14 +332,14 @@ void batch_normalization_layer<TensorDataType, T_layout, Dev>::fp_compute_distco
     LBANN_ERROR("statics_group_size must be either 0 or 1 for now.");
   }
 
-  m_bn->forward_stage2(this->get_prev_activations_t(),
+  m_bn->forward_stage2(this->dc().get_prev_activations(),
                        m_mean_t,
                        m_var_t,
                        m_running_mean_t,
                        m_running_var_t,
                        m_scale_t,
                        m_bias_t,
-                       this->get_activations_t(),
+                       this->dc().get_activations(),
                        is_training);
 
   this->copy_out_activations();
@@ -358,7 +358,7 @@ void batch_normalization_layer<TensorDataType, T_layout, Dev>::bp_compute_distco
       m_scale_t,
       this->get_data_type_weights(0).get_values().LockedMatrix().LockedBuffer()));
 
-  m_bn->backward_stage1(this->get_prev_activations_t(),
+  m_bn->backward_stage1(this->dc().get_prev_activations(),
                         this->get_prev_error_signals_t(),
                         m_mean_t, m_var_t, m_scale_t,
                         m_scale_gradient_t, m_bias_gradient_t,
@@ -385,7 +385,7 @@ void batch_normalization_layer<TensorDataType, T_layout, Dev>::bp_compute_distco
     bias_optimizer->add_to_gradient(*m_bias_gradient, TensorDataType{1}, true);
   }
 
-  m_bn->backward_stage2(this->get_prev_activations_t(),
+  m_bn->backward_stage2(this->dc().get_prev_activations(),
                         this->get_prev_error_signals_t(),
                         m_mean_t, m_var_t, m_scale_t,
                         m_mean_gradient_t, m_var_gradient_t,

@@ -205,7 +205,7 @@ private:
     m_softmax = new dc::Softmax(dc::get_backend());
     auto dc_softmax_mode = m_mode == softmax_mode::INSTANCE ?
         ::distconv::SoftmaxMode::INSTANCE : ::distconv::SoftmaxMode::CHANNEL;
-    m_softmax->setup(this->get_prev_activations_t(), dc_softmax_mode);
+    m_softmax->setup(this->dc().get_prev_activations(), dc_softmax_mode);
   }
 #endif // LBANN_HAS_DISTCONV
 };

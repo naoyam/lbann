@@ -344,13 +344,6 @@ private:
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {}
   void setup_distconv_post(size_t ws_size) override {}
 
-  virtual const TensorDevType &get_prev_activations_t() const;
-  virtual TensorDevType &get_prev_activations_t();
-  virtual const TensorDevType &get_prev_activations_const_view() const;
-  virtual const TensorDevType &get_activations_t() const;
-  virtual TensorDevType &get_activations_t();
-  virtual const TensorDevType &get_activations_t(const Layer &child) const;
-
   virtual const TensorDevType &get_prev_error_signals_t() const;
   virtual TensorDevType &get_prev_error_signals_t();
   virtual const TensorDevType &get_prev_error_signals_const_view() const;

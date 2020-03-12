@@ -1011,38 +1011,6 @@ int data_type_layer<TensorDataType>::get_num_spatial_dims() const {
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::
-get_prev_activations_t() const {
-  return dc().get_prev_activations();
-}
-
-template <typename TensorDataType>
-typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_prev_activations_t() {
-  return dc().get_prev_activations();
-}
-
-template <typename TensorDataType>
-const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_prev_activations_const_view() const {
-  return dc().get_original_prev_activations();
-}
-
-template <typename TensorDataType>
-const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t() const {
-  return dc().get_activations();
-}
-
-template <typename TensorDataType>
-const typename data_type_layer<TensorDataType>::TensorDevType& data_type_layer<TensorDataType>::get_activations_t(
-    const Layer &child) const {
-  return dc().get_activations(child);
-}
-
-template <typename TensorDataType>
-typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_t() {
-  return dc().get_activations();
-}
-
-template <typename TensorDataType>
-const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::
 get_prev_error_signals_t() const {
   return m_prev_error_signals_t;
 }

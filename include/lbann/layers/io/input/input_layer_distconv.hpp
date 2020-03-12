@@ -199,18 +199,6 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
   InputType *m_copy_pinned_buffer = nullptr;
 
-  using input_layer<TensorDataType, T_io_buffer, T_layout, Dev>::get_activations_t;
-
-  const TensorDevType &get_activations_t(const Layer &child) const override {
-    const int child_index = std::find(this->get_child_layers().begin(),
-                                      this->get_child_layers().end(),
-                                      &child) - this->get_child_layers().begin();
-    if (child_index >= this->get_num_children()) {
-      LBANN_ERROR("Invalid child layer");
-    }
-    return this->dc().get_activations(child);
-  }
-
   void setup_shuffler_buffers(const TensorHost &src, const TensorHost &dst) {
     auto shuffler_src_size = TensorShuffler::get_buf_size(src);
     if (m_shuffler_src_buf_size < shuffler_src_size) {
@@ -271,7 +259,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     auto &input_view = m_input_host_view;
     auto &input_tensor = m_input_host_tensor;
 
-    this->get_activations_t().set_outermost_dimension(mb_size);
+    this->dc().get_activations().set_outermost_dimension(mb_size);
     m_input_dev.set_outermost_dimension(mb_size);
 
     assert_eq(mb_size * dc::get_number_of_io_partitions(),
@@ -344,7 +332,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
         const auto norm_alpha = std::stod(norm_alpha_p);
         const auto norm_beta = std::stod(norm_beta_p);
         prof_region_begin("cast-scale-bias-from-int16", prof_colors[1], false);
-        dc::tensor::CastScaleBias(this->get_activations_t(),
+        dc::tensor::CastScaleBias(this->dc().get_activations(),
                                   m_input_dev,
                                   (TensorDataType) norm_alpha,
                                   (TensorDataType) norm_beta,
@@ -352,7 +340,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
         prof_region_end("cast-scale-bias-from-int16", false);
       } else {
         prof_region_begin("cast-from-int16", prof_colors[1], false);
-        dc::tensor::Cast(this->get_activations_t(), m_input_dev, dc::get_stream());
+        dc::tensor::Cast(this->dc().get_activations(), m_input_dev, dc::get_stream());
         prof_region_end("cast-from-int16", false);
       }
     }
@@ -384,7 +372,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     auto local_shape = tensor_shape;
     // calculated by Distconv
     local_shape[dc::get_sample_dim()] = 0;
-    auto dist = this->get_activations_t().get_distribution();
+    auto dist = this->dc().get_activations().get_distribution();
     // Assumes no halo required.
     dist.clear_overlap();
 

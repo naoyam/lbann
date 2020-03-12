@@ -221,8 +221,8 @@ void leaky_relu_layer<TensorDataType, Layout, Device>::
 fp_compute_distconv() {
   assert_always(Layout == data_layout::DATA_PARALLEL);
   assert_always(this->distconv_enabled());
-  m_leaky_relu->forward(this->get_prev_activations_t(), m_negative_slope,
-                        this->get_activations_t());
+  m_leaky_relu->forward(this->dc().get_prev_activations(), m_negative_slope,
+                        this->dc().get_activations());
   this->copy_out_activations();
 }
 
@@ -231,7 +231,7 @@ void leaky_relu_layer<TensorDataType, Layout, Device>::
 bp_compute_distconv() {
   assert_always(Layout == data_layout::DATA_PARALLEL);
   assert_always(this->distconv_enabled());
-  m_leaky_relu->backward(this->get_prev_activations_t(),
+  m_leaky_relu->backward(this->dc().get_prev_activations(),
                          this->get_prev_error_signals_t(),
                          m_negative_slope,
                          this->get_error_signals_t());

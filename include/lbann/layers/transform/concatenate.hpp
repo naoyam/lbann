@@ -98,7 +98,7 @@ private:
   std::vector<TensorDevType> m_error_signals_siblings;
 
   dc::Shape get_activations_tensor_local_shape() const override {
-    auto shape = this->get_prev_activations_t().get_local_shape();
+    auto shape = this->dc().get_prev_activations().get_local_shape();
     shape[-2] = this->get_output_tensor_shape()[-2];
     return shape;
   }

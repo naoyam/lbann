@@ -235,14 +235,14 @@ private:
   }
   void fp_compute_distconv() {
     assert_always(this->distconv_enabled());
-    m_cross_entropy->forward(this->get_prev_activations_t(), m_ground_truth_t,
-                             this->get_activations_t());
+    m_cross_entropy->forward(this->dc().get_prev_activations(), m_ground_truth_t,
+                             this->dc().get_activations());
     this->copy_out_activations();
   }
 
   void bp_compute_distconv() {
     assert_always(this->distconv_enabled());
-    m_cross_entropy->backward(this->get_prev_activations_t(),
+    m_cross_entropy->backward(this->dc().get_prev_activations(),
                               m_ground_truth_t,
                               this->get_prev_error_signals_t(),
                               this->get_error_signals_t(), m_d_ground_truth_t);
@@ -280,7 +280,7 @@ private:
   }
 
   dc::Shape get_activations_tensor_local_shape() const {
-    auto input_shape = this->get_prev_activations_t().get_local_shape();
+    auto input_shape = this->dc().get_prev_activations().get_local_shape();
     for (int i = 0; i < input_shape.length() - 1; ++i) {
       input_shape[i] = 1;
     }
@@ -292,7 +292,7 @@ private:
     data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
     m_ground_truth_t = dynamic_cast<const data_type_layer<TensorDataType>*>(
-        this->get_parent_layers()[1])->get_activations_t(*this);
+        this->get_parent_layers()[1])->dc().get_activations(*this);
   }
 
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists)
@@ -312,8 +312,8 @@ private:
     m_d_ground_truth_t.zero(dc::get_stream());
 
     m_cross_entropy = new dc::CrossEntropy(dc::get_backend());
-    m_cross_entropy->setup(this->get_prev_activations_t(), m_ground_truth_t,
-                           this->get_activations_t());
+    m_cross_entropy->setup(this->dc().get_prev_activations(), m_ground_truth_t,
+                           this->dc().get_activations());
   }
 
   using data_type_layer<TensorDataType>::get_error_signals_t;
