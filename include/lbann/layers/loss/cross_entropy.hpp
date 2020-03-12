@@ -32,6 +32,30 @@
 
 namespace lbann {
 
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType>
+class cross_entropy_distconv_layer: public data_type_distconv_layer<TensorDataType> {
+ public:
+  using TensorDevType = typename data_type_distconv_layer<TensorDataType>::TensorDevType;
+
+  cross_entropy_distconv_layer(Layer& layer): data_type_distconv_layer<TensorDataType>(layer) {}
+  virtual ~cross_entropy_distconv_layer() = default;
+
+ protected:
+  // NOTE: LBANN matrix is a 2-D matrix, while Distconv keeps the
+  // original spatial and channel dimensions, so
+  // get_output_tensor_shape() doesn't work here.
+  dc::Shape get_output_tensor_shape(int output_index=0) const override {
+    dc::Shape shape = this->get_input_tensor_shape(0);
+    assert_always(shape.num_dims() == 5);
+    for (int i = 0; i < shape.num_dims() - 1; ++i) {
+      shape[i] = 1;
+    }
+    return shape;
+  }
+};
+#endif // LBANN_HAS_DISTCONV
+
 /** @brief Cross entropy loss function.
  *
  *  Given a predicted distribution @f$y@f$ and ground truth
@@ -206,6 +230,9 @@ private:
   TensorDevType m_ground_truth_t;
   TensorDevType m_d_ground_truth_t;
 
+  void setup_distconv_layer() override {
+    this->get_dc() = make_unique<cross_entropy_distconv_layer<TensorDataType>>(*this);
+  }
   void fp_compute_distconv() {
     assert_always(this->distconv_enabled());
     m_cross_entropy->forward(this->get_prev_activations_t(), m_ground_truth_t,
@@ -258,27 +285,6 @@ private:
       input_shape[i] = 1;
     }
     return input_shape;
-  }
-
-  // NOTE: LBANN matrix is a 2-D matrix, while Distconv keeps the
-  // original spatial and channel dimensions, so
-  // get_output_tensor_shape() doesn't work here.
-  void setup_activations_tensor(const std::array<dc::Dist, dc::num_dists> &dists,
-                                bool allocate=true) override {
-    const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-    auto output_tensor_shape = this->get_prev_activations_t().get_shape();
-    for (int i = 0; i < output_tensor_shape.length() - 1; ++i) {
-      output_tensor_shape[i] = 1;
-    }
-    const auto activations_local_shape =
-        this->get_activations_tensor_local_shape();
-    this->get_activations_t() = TensorDevType(output_tensor_shape,
-                                              loc, dists[1],
-                                              activations_local_shape);
-    if (allocate) {
-      assert0(this->get_activations_t().allocate());
-      this->get_activations_t().zero(dc::get_stream());
-    }
   }
 
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists)

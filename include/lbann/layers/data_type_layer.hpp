@@ -350,7 +350,6 @@ private:
   virtual const TensorDevType &get_activations_t() const;
   virtual TensorDevType &get_activations_t();
   virtual const TensorDevType &get_activations_t(const Layer &child) const;
-  //virtual TensorDevType &get_activations_copyout();
 
   virtual const TensorDevType &get_prev_error_signals_t() const;
   virtual TensorDevType &get_prev_error_signals_t();
@@ -385,11 +384,7 @@ private:
   bool keep_original() const;
 
   /** Initialize distconv tensors */
-  virtual void setup_prev_activations_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
   virtual dc::Shape get_activations_tensor_local_shape() const;
-  virtual void setup_activations_tensor(const std::array<dc::Dist, dc::num_dists> &dists,
-                                        bool allocate=true);
-
   virtual void setup_prev_error_signals_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
   virtual void setup_error_signals_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
   virtual void setup_error_signals_copyout_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
@@ -405,8 +400,6 @@ private:
   void dump_reference_error_signals();
 
  private:
-  /** Elemental-format activation matrix */
-  //TensorDevType m_activations_copyout;
   /** Previous error signal tensor */
   TensorDevType m_prev_error_signals_t;
   /** View to Elemental matrix */

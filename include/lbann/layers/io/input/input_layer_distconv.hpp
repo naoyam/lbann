@@ -191,7 +191,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
   dc::TensorHost<InputType> m_labels_host_view;
   dc::TensorHost<InputType> m_labels_host_tensor;
-  TensorDevType m_labels_dev;
+  //TensorDevType m_labels_dev;
   TensorDevInput m_labels_input_type;
   // shufflers for the labels
   std::unique_ptr<TensorShuffler> m_label_shuffler;
@@ -208,12 +208,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     if (child_index >= this->get_num_children()) {
       LBANN_ERROR("Invalid child layer");
     }
-    if (child_index == 0) {
-      return this->get_activations_t();
-    } else {
-      assert_eq(child_index, 1);
-      return m_labels_dev;
-    }
+    return this->dc().get_activations(child);
   }
 
   void setup_shuffler_buffers(const TensorHost &src, const TensorHost &dst) {
@@ -430,11 +425,13 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     m_labels_input_type.zero(dc::get_stream());
 
     // The final label tensor
-    m_labels_dev = TensorDevType(tensor_shape, loc, dist);
-    assert0(m_labels_dev.allocate());
-    m_labels_dev.zero(dc::get_stream());
+    this->dc().get_outputs().emplace_back(
+        make_unique<TensorDevType>(tensor_shape, loc, dist));
+    auto &label_tensor = this->dc().get_activations(1);
+    assert0(label_tensor.allocate());
+    label_tensor.zero(dc::get_stream());
 
-    dc::MPIRootPrintStreamInfo() << "label tensor: " << m_labels_dev;
+    dc::MPIRootPrintStreamInfo() << "label tensor: " << label_tensor;
   }
 
   void copy_label_distconv(int mb_size) {
@@ -443,10 +440,12 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     assert_eq(mb_size * dc::get_number_of_io_partitions(),
               this->get_activations(mat_idx).Width());
 
+    auto &labels_dev = this->dc().get_activations(1);
+
     // Adjust the sample size
     m_labels_host_view.set_outermost_dimension(mb_size);
     m_labels_host_tensor.set_outermost_dimension(mb_size);
-    m_labels_dev.set_outermost_dimension(mb_size);
+    labels_dev.set_outermost_dimension(mb_size);
     m_labels_input_type.set_outermost_dimension(mb_size);
 
     // Setup view to the LBANN matrix
@@ -483,7 +482,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
     // Cast to DataType. Just a copy if both tensors are in the same type.
     prof_region_begin("label-cast-from-int16", prof_colors[1], false);
-    dc::tensor::Cast(m_labels_dev, m_labels_input_type, dc::get_stream());
+    dc::tensor::Cast(labels_dev, m_labels_input_type, dc::get_stream());
     prof_region_end("label-cast-from-int16", false);
   }
 #endif // LBANN_HAS_DISTCONV

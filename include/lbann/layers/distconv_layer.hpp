@@ -44,7 +44,7 @@ public:
 
   virtual void setup_prev_activations(const dc::Dist& dist) = 0;
   virtual void setup_original_prev_activations() = 0;
-  virtual void setup_activations(const dc::Dist& dist, bool allocate=true) = 0;
+  virtual void setup_activations(const dc::Dist& dist) = 0;
   virtual void setup_original_activations() = 0;
   virtual void setup_fp_tensors(const dc::Dist &input_dist,
                                 const dc::Dist &output_dist);

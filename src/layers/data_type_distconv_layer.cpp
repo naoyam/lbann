@@ -222,17 +222,16 @@ dc::Shape data_type_distconv_layer<TensorDataType>::get_activations_tensor_local
 
 template <typename TensorDataType>
 void data_type_distconv_layer<TensorDataType>::setup_activations(
-    const dc::Dist& dist, bool allocate) {
+    const dc::Dist& dist) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const dc::Shape output_tensor_shape = get_output_tensor_shape();
   const auto activations_local_shape =
       get_activations_tensor_local_shape();
-  m_outputs.emplace_back(make_unique<TensorDevType>(output_tensor_shape,
-                                                    loc, dist, activations_local_shape));
-  if (allocate) {
-    assert0(m_outputs.back()->allocate());
-    m_outputs.back()->zero(dc::get_stream());
-  }
+  m_outputs.emplace_back(make_unique<TensorDevType>(
+      output_tensor_shape,
+      loc, dist, activations_local_shape));
+  assert0(m_outputs.back()->allocate());
+  m_outputs.back()->zero(dc::get_stream());
 }
 
 template <typename TensorDataType>
@@ -259,13 +258,6 @@ void data_type_distconv_layer<TensorDataType>::setup_original_activations() {
     m_original_outputs[i] = make_unique<TensorDevType>(
         output_tensor_shape, loc, sample_dist, output_local_shape);
   }
-#if 0
-  m_activations_shuffler = dc::get_tensor_shuffler(
-      dc().get_activations(), m_activations_copyout);
-  for (int mode = 0; mode < 3; ++mode) {
-    m_activations_shuffler_last_mb[mode] = nullptr;
-  }
-#endif
 }
 
 template <typename TensorDataType>

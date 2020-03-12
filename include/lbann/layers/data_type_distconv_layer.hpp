@@ -63,10 +63,16 @@ public:
 
   void setup_prev_activations(const dc::Dist& dist) override;
   void setup_original_prev_activations() override;
-  void setup_activations(const dc::Dist& dist, bool allocate=true) override;
+  void setup_activations(const dc::Dist& dist) override;
   void setup_original_activations() override;
 
   void set_original_activations_outermost_dimension(size_t dim);
+
+  // TODO: REMOVE THIS. This is a temporary interface until
+  // distconv_layer refactoring is completed.
+  std::vector<std::unique_ptr<TensorDevType>> &get_outputs() {
+    return m_outputs;
+  }
 
  protected:
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
@@ -74,9 +80,9 @@ public:
   std::vector<std::unique_ptr<TensorDevType>> m_outputs;
   std::vector<std::unique_ptr<TensorDevType>> m_original_outputs;
 
-  dc::Shape get_input_tensor_shape(int input_index=0) const;
-  dc::Shape get_output_tensor_shape(int output_index=0) const;
-  dc::Shape get_activations_tensor_local_shape() const;
+  virtual dc::Shape get_input_tensor_shape(int input_index=0) const;
+  virtual dc::Shape get_output_tensor_shape(int output_index=0) const;
+  virtual dc::Shape get_activations_tensor_local_shape() const;
 };
 
 } // namespace lbann
