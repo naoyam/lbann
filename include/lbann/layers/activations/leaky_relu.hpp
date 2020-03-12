@@ -86,7 +86,6 @@ private:
       std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
       std::set<dc::Dist*> &updated,
       std::set<dc::Dist*> &fixed) override;
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
 #endif // LBANN_HAS_DISTCONV
 };
