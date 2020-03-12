@@ -1173,41 +1173,10 @@ void data_type_layer<TensorDataType>::setup_activations_tensor(
 }
 
 template <typename TensorDataType>
-void data_type_layer<TensorDataType>::setup_activations_copyout_tensor(
-    const std::array<dc::Dist, dc::num_dists> &dists) {
-  dc().setup_original_activations();
-#if 0
-  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-  const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(get_num_dims());
-  const auto output_tensor_shape = dc().get_activations().get_shape();
-  assert_always(!output_tensor_shape.is_empty());
-  auto output_local_shape = output_tensor_shape;
-  // Set the sample dimension as 0 so that its actual value is
-  // calculated by Distconv
-  output_local_shape[-1] = 0;
-  m_activations_copyout = TensorDevType(output_tensor_shape, loc, sample_dist,
-                                        output_local_shape);
-  for (int i = 0; i < get_num_children(); ++i) {
-    if (m_child_copy_out_required[i]) {
-      if (i != 0) {
-        LBANN_ERROR("Copyout of non-first tensor not supported yet");
-      }
-      m_activations_shuffler = dc::get_tensor_shuffler(
-          dc().get_activations(), get_activations_copyout());
-      for (int mode = 0; mode < 3; ++mode) {
-        m_activations_shuffler_last_mb[mode] = nullptr;
-      }
-    }
-  }
-#endif
-}
-
-template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_tensors_fwd(
     const std::array<dc::Dist, dc::num_dists> &dists) {
   if (!this->distconv_enabled()) return;
   this->dc().setup_fp_tensors(dists[0], dists[1]);
-  this->setup_activations_copyout_tensor(dists);
 }
 
 template <typename TensorDataType>

@@ -45,6 +45,7 @@ void distconv_layer::setup_fp_tensors(const dc::Dist &input_dist,
   setup_original_prev_activations();
   setup_prev_activations(input_dist);
   setup_activations(output_dist);
+  setup_original_activations();
 }
 
 }  // namespace lbann

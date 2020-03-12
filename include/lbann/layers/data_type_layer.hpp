@@ -389,7 +389,6 @@ private:
   virtual dc::Shape get_activations_tensor_local_shape() const;
   virtual void setup_activations_tensor(const std::array<dc::Dist, dc::num_dists> &dists,
                                         bool allocate=true);
-  virtual void setup_activations_copyout_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
 
   virtual void setup_prev_error_signals_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
   virtual void setup_error_signals_tensor(const std::array<dc::Dist, dc::num_dists> &dists);
