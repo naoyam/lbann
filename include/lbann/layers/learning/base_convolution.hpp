@@ -1263,10 +1263,6 @@ private:
     MPIPrintStreamDebug()
         << "m_kernel_dims: " << ss.str();
 
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
-
     // assumes no partitioning on channel/filter dimensions
     assert_eq(dists[0].get_split_shape()[-2], 1);
     auto shared_dist = dc::Dist::make_shared_distribution(
@@ -1337,9 +1333,9 @@ private:
   void distconv_forward() {
     assert0(dc::tensor::View(
         this->m_kernel_t, this->get_data_type_weights(0).get_values().LockedBuffer()));
-    this->m_conv->forward(TensorDataType{1}, this->get_prev_activations_t(),
+    this->m_conv->forward(TensorDataType{1}, this->dc().get_prev_activations(),
                           this->m_kernel_t,
-                          TensorDataType{0}, this->get_activations_t());
+                          TensorDataType{0}, this->dc().get_activations());
     if (this->early_terminate_last_iteration()) {
       dc::dump_tensor(this->early_terminate_last_iteration(),
                       this->m_kernel_t, this->get_name() + "_weights");
@@ -1351,7 +1347,7 @@ private:
     assert0(dc::tensor::View(
         this->m_bias_t, this->get_data_type_weights(1).get_values().LockedBuffer()));
     this->m_conv->apply_bias(this->m_bias_scaling_factor, this->m_bias_t,
-                             TensorDataType{1}, this->get_activations_t());
+                             TensorDataType{1}, this->dc().get_activations());
   }
 
   void distconv_backward_data() {
@@ -1367,7 +1363,7 @@ private:
   }
 
   void distconv_backward_filter() {
-    const bool has_local_data = this->get_prev_activations_t().get_local_size() > 0 &&
+    const bool has_local_data = this->dc().get_prev_activations().get_local_size() > 0 &&
         this->get_prev_error_signals_t().get_local_size() > 0;
 
     if (this->m_bias_scaling_factor != TensorDataType(0)
@@ -1404,7 +1400,7 @@ private:
         this->m_kernel_gradient_e, kernel_gradient.Buffer()));
     if (has_local_data) {
       this->m_conv->backward_filter(gradient_scale,
-                                    this->get_prev_activations_t(),
+                                    this->dc().get_prev_activations(),
                                     this->get_prev_error_signals_t(), dst_scale,
                                     this->m_kernel_gradient_e, false);
     } else {

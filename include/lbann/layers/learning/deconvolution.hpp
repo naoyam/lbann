@@ -254,7 +254,7 @@ protected:
     std::reverse(dilations.begin(), dilations.end());
     const auto output_spatial_local_shape =
         ::distconv::get_deconvolution_output_local_tensor_shape(
-            this->get_prev_activations_t(),
+            this->dc().get_prev_activations(),
             filter_dims, strides, false, dilations,
             this->m_groups);
     return output_spatial_local_shape;
@@ -282,8 +282,8 @@ protected:
     std::vector<int> dilations = this->m_dilations;
     std::reverse(dilations.begin(), dilations.end());
 
-    this->m_conv->setup(this->get_prev_activations_t(),
-                        this->m_kernel_t, this->get_activations_t(),
+    this->m_conv->setup(this->dc().get_prev_activations(),
+                        this->m_kernel_t, this->dc().get_activations(),
                         this->get_error_signals_t(), this->m_kernel_gradient_e,
                         this->get_prev_error_signals_t(),
                         pads, strides, dilations, this->m_groups,

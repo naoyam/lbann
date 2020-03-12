@@ -70,9 +70,14 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     return this->get_output_dims().size() + 1;
   }
 
+  // No enforced local shape as the activations tensor is always
+  // copied from the El matrix.
+  dc::Shape get_activations_tensor_local_shape() const override {
+    return dc::Shape(get_num_dims(), 0);
+  }
+
   void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
     using namespace dc;
-    input_layer<TensorDataType, T_io_buffer, T_layout, Dev>::setup_tensors_fwd(dists);
     if (!this->distconv_enabled()) return;
 
     // copies the label data as well when the second child layer is
@@ -131,13 +136,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
       setup_shuffler_buffers(m_input_host_view, m_input_host_tensor);
     }
 
-    // Layer::setup_activations_tensor does not work as it assumes
-    // prev_activations_tensor is already
-    // setup. prev_activations_tensor is not necessary for input.
-    //const LocaleMPI loc(dc::get_mpi_comm(), false);
-    this->get_activations_t() = TensorDevType(tensor_shape, loc, dist);
-    assert0(this->get_activations_t().allocate());
-    this->get_activations_t().zero(dc::get_stream());
+    this->dc().setup_activations(dists[1]);
 
     // Keeps the same input type and convert to float on GPU
     m_input_dev = TensorDevInput(tensor_shape, loc, dist);
@@ -192,30 +191,13 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
   dc::TensorHost<InputType> m_labels_host_view;
   dc::TensorHost<InputType> m_labels_host_tensor;
-  TensorDevType m_labels_dev;
+  //TensorDevType m_labels_dev;
   TensorDevInput m_labels_input_type;
   // shufflers for the labels
   std::unique_ptr<TensorShuffler> m_label_shuffler;
   std::array<std::unique_ptr<TensorShuffler>, 3> m_label_shuffler_last_mb;
 
   InputType *m_copy_pinned_buffer = nullptr;
-
-  using input_layer<TensorDataType, T_io_buffer, T_layout, Dev>::get_activations_t;
-
-  const TensorDevType &get_activations_t(const Layer &child) const override {
-    const int child_index = std::find(this->get_child_layers().begin(),
-                                      this->get_child_layers().end(),
-                                      &child) - this->get_child_layers().begin();
-    if (child_index >= this->get_num_children()) {
-      LBANN_ERROR("Invalid child layer");
-    }
-    if (child_index == 0) {
-      return this->get_activations_t();
-    } else {
-      assert_eq(child_index, 1);
-      return m_labels_dev;
-    }
-  }
 
   void setup_shuffler_buffers(const TensorHost &src, const TensorHost &dst) {
     auto shuffler_src_size = TensorShuffler::get_buf_size(src);
@@ -277,7 +259,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     auto &input_view = m_input_host_view;
     auto &input_tensor = m_input_host_tensor;
 
-    this->get_activations_t().set_outermost_dimension(mb_size);
+    this->dc().get_activations().set_outermost_dimension(mb_size);
     m_input_dev.set_outermost_dimension(mb_size);
 
     assert_eq(mb_size * dc::get_number_of_io_partitions(),
@@ -350,7 +332,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
         const auto norm_alpha = std::stod(norm_alpha_p);
         const auto norm_beta = std::stod(norm_beta_p);
         prof_region_begin("cast-scale-bias-from-int16", prof_colors[1], false);
-        dc::tensor::CastScaleBias(this->get_activations_t(),
+        dc::tensor::CastScaleBias(this->dc().get_activations(),
                                   m_input_dev,
                                   (TensorDataType) norm_alpha,
                                   (TensorDataType) norm_beta,
@@ -358,7 +340,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
         prof_region_end("cast-scale-bias-from-int16", false);
       } else {
         prof_region_begin("cast-from-int16", prof_colors[1], false);
-        dc::tensor::Cast(this->get_activations_t(), m_input_dev, dc::get_stream());
+        dc::tensor::Cast(this->dc().get_activations(), m_input_dev, dc::get_stream());
         prof_region_end("cast-from-int16", false);
       }
     }
@@ -390,7 +372,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     auto local_shape = tensor_shape;
     // calculated by Distconv
     local_shape[dc::get_sample_dim()] = 0;
-    auto dist = this->get_activations_t().get_distribution();
+    auto dist = this->dc().get_activations().get_distribution();
     // Assumes no halo required.
     dist.clear_overlap();
 
@@ -431,11 +413,13 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     m_labels_input_type.zero(dc::get_stream());
 
     // The final label tensor
-    m_labels_dev = TensorDevType(tensor_shape, loc, dist);
-    assert0(m_labels_dev.allocate());
-    m_labels_dev.zero(dc::get_stream());
+    this->dc().get_outputs().emplace_back(
+        make_unique<TensorDevType>(tensor_shape, loc, dist));
+    auto &label_tensor = this->dc().get_activations(1);
+    assert0(label_tensor.allocate());
+    label_tensor.zero(dc::get_stream());
 
-    dc::MPIRootPrintStreamInfo() << "label tensor: " << m_labels_dev;
+    dc::MPIRootPrintStreamInfo() << "label tensor: " << label_tensor;
   }
 
   void copy_label_distconv(int mb_size) {
@@ -444,10 +428,12 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
     assert_eq(mb_size * dc::get_number_of_io_partitions(),
               this->get_activations(mat_idx).Width());
 
+    auto &labels_dev = this->dc().get_activations(1);
+
     // Adjust the sample size
     m_labels_host_view.set_outermost_dimension(mb_size);
     m_labels_host_tensor.set_outermost_dimension(mb_size);
-    m_labels_dev.set_outermost_dimension(mb_size);
+    labels_dev.set_outermost_dimension(mb_size);
     m_labels_input_type.set_outermost_dimension(mb_size);
 
     // Setup view to the LBANN matrix
@@ -484,7 +470,7 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 
     // Cast to DataType. Just a copy if both tensors are in the same type.
     prof_region_begin("label-cast-from-int16", prof_colors[1], false);
-    dc::tensor::Cast(m_labels_dev, m_labels_input_type, dc::get_stream());
+    dc::tensor::Cast(labels_dev, m_labels_input_type, dc::get_stream());
     prof_region_end("label-cast-from-int16", false);
   }
 #endif // LBANN_HAS_DISTCONV

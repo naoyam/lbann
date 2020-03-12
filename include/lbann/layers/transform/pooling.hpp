@@ -545,8 +545,8 @@ private:
     LBANN_ERROR("pooling_layer: DISTCONV not detected");
 #else
     assert_always(this->distconv_enabled());
-    m_pooling->forward(TensorDataType{1}, this->get_prev_activations_t(),
-                       TensorDataType{0}, this->get_activations_t());
+    m_pooling->forward(TensorDataType{1}, this->dc().get_prev_activations(),
+                       TensorDataType{0}, this->dc().get_activations());
     this->copy_out_activations();
 #endif
   }
@@ -556,9 +556,9 @@ private:
     LBANN_ERROR("pooling_layer: DISTCONV not detected");
 #else
     assert_always(this->distconv_enabled());
-    m_pooling->backward(TensorDataType{1}, this->get_activations_t(),
+    m_pooling->backward(TensorDataType{1}, this->dc().get_activations(),
                         this->get_prev_error_signals_t(),
-                        this->get_prev_activations_t(), TensorDataType{0},
+                        this->dc().get_prev_activations(), TensorDataType{0},
                         this->get_error_signals_t());
     this->copy_out_error_signals();
 #endif
@@ -624,24 +624,9 @@ private:
     bool use_padding = m_pads[0] != 0;
     auto output_spatial_local_shape =
         ::distconv::get_pooling_output_local_tensor_shape(
-            this->get_prev_activations_t(),
+            this->dc().get_prev_activations(),
             filter_dims, strides, use_padding, dilations);
     return output_spatial_local_shape;
-  }
-
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
-    if (!this->distconv_enabled()) return;
-
-    dc::MPIPrintStreamDebug()
-        << "pooling: setup_tensors."
-        << " pads: " << dc::util::join_xd_array(m_pads)
-        << ", pool_dims: " << dc::util::join_xd_array(m_pool_dims)
-        << ", m_strides: " << dc::util::join_xd_array(m_strides);
-
-    this->setup_prev_activations_tensor(dists);
-    this->setup_activations_tensor(dists);
-    this->setup_activations_copyout_tensor(dists);
   }
 
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
@@ -678,17 +663,13 @@ private:
 
     dc::MPIPrintStreamDebug()
         << "Pooling (" << this->get_name() << "): "
-        << "prev_activations_const_view: " << this->get_prev_activations_const_view()
-        << ", prev_activations_t: " << this->get_prev_activations_t()
-        << ", activations_copyout: " << this->get_activations_copyout()
-        << ", activations_t: " << this->get_activations_t()
-        << ", prev_error_signals_const_view: " << this->get_prev_error_signals_const_view()
+        << "prev_activations_t: " << this->dc().get_prev_activations()
+        << ", activations_t: " << this->dc().get_activations()
         << ", prev_error_signals_t: " << this->get_prev_error_signals_t()
-        << ", error_signals_copyout: " << this->get_error_signals_copyout()
         << ", error_signals_t: " << this->get_error_signals_t();
 
-    m_pooling->setup(this->get_prev_activations_t(),
-                     this->get_activations_t(),
+    m_pooling->setup(this->dc().get_prev_activations(),
+                     this->dc().get_activations(),
                      this->get_error_signals_t(),
                      this->get_prev_error_signals_t(),
                      pool_dims, pads, strides,

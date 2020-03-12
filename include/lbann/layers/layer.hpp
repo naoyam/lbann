@@ -38,6 +38,7 @@
 #include "lbann/utils/memory.hpp"
 #include "lbann/utils/typename.hpp"
 #include "lbann/utils/distconv.hpp"
+#include "lbann/layers/distconv_layer.hpp"
 #include <string>
 #include <vector>
 
@@ -577,10 +578,11 @@ private:
   friend std::vector<weights*> extract_weights(Layer& l);
 
 #ifdef LBANN_HAS_DISTCONV
- protected:
+  friend class distconv_layer;
+
+ public:
   /** Indicate whether distconv is supported. */
   virtual bool is_distconv_supported() const { return true; }
- public:
   /** Enables distconv. */
   void enable_distconv();
   /** Indicate whether distconv is enabled. */
@@ -589,6 +591,9 @@ private:
   /** Get the parallel strategy for the layer. */
   ParallelStrategy& get_parallel_strategy() { return m_parallel_strategy; }
   const ParallelStrategy& get_parallel_strategy() const { return m_parallel_strategy; }
+
+  virtual distconv_layer& dc() { return *m_dc; }
+  virtual const distconv_layer& dc() const { return *m_dc; }
 
   virtual void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
@@ -604,6 +609,9 @@ private:
   virtual void setup_distconv_post(size_t ws_size) = 0;
 
  protected:
+  virtual void setup_distconv_layer() = 0;
+  std::unique_ptr<distconv_layer>& get_dc() { return m_dc; };
+  const std::unique_ptr<distconv_layer>& get_dc() const { return m_dc; };
   virtual void fp_setup_distconv(El::Int mini_batch_size) = 0;
   virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
 
@@ -622,6 +630,8 @@ private:
   int m_exit_count = -1;
   /** Parallel strategy for the layer. */
   ParallelStrategy m_parallel_strategy;
+
+  std::unique_ptr<distconv_layer> m_dc;
 #endif // LBANN_HAS_DISTCONV
 };
 

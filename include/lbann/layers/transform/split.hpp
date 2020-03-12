@@ -37,6 +37,25 @@
 
 namespace lbann {
 
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType>
+class split_distconv_layer: public data_type_distconv_layer<TensorDataType> {
+ public:
+  using TensorDevType = typename data_type_distconv_layer<TensorDataType>::TensorDevType;
+
+  split_distconv_layer(Layer& layer): data_type_distconv_layer<TensorDataType>(layer) {}
+  virtual ~split_distconv_layer() = default;
+  void setup_activations(const dc::Dist& dist) override {
+    const auto &parent_activations =
+        dynamic_cast<const TensorDevType&>(this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
+    for (int i = 0; i < this->layer().get_num_children(); ++i) {
+      this->m_outputs.emplace_back(make_unique<TensorDevType>(parent_activations));
+    }
+  }
+};
+
+#endif // LBANN_HAS_DISTCONV
+
 /** @brief Present input tensor to multiple outputs. */
 template <typename TensorDataType,
           data_layout T_layout = data_layout::DATA_PARALLEL,
@@ -78,16 +97,13 @@ protected:
   using TensorDevType = typename data_type_layer<TensorDataType>::TensorDevType;
   std::vector<TensorDevType> m_prev_error_signals_siblings;
 
+  void setup_distconv_layer() override {
+    this->get_dc() = make_unique<split_distconv_layer<TensorDataType>>(*this);
+  }
+
   void fp_compute_distconv() {}
 
  public:
-
-  using data_type_layer<TensorDataType>::get_activations_t;
-
-  const TensorDevType &get_activations_t(const Layer &child) const {
-    // Pass the same tensor as a const reference to multiple child layers
-    return this->get_activations_t();
-  }
 
   void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
@@ -104,15 +120,6 @@ protected:
     // dx == dy
     equivalents[&layer_dists[2]].insert(&layer_dists[3]);
     equivalents[&layer_dists[3]].insert(&layer_dists[2]);
-  }
-
-  void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    data_type_layer<TensorDataType>::setup_tensors_fwd(dists);
-    if (!this->distconv_enabled()) return;
-    this->setup_prev_activations_tensor(dists);
-    // activation is just a copy of prev activation
-    get_activations_t() = this->get_prev_activations_t();
-    this->setup_activations_copyout_tensor(dists);
   }
 
   void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {

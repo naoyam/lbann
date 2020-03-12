@@ -2,6 +2,8 @@
 set_full_path(THIS_DIR_SOURCES
   data_type_layer.cpp
   layer.cpp
+  distconv_layer.cpp
+  data_type_distconv_layer.cpp
   )
 
 # Add the subdirectories
