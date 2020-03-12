@@ -75,6 +75,10 @@ data_type_distconv_layer<TensorDataType>::get_original_activations(
                 "(requested index ", child_index, ", but there are ",
                 m_original_outputs.size(), " original activation tensors)");
   }
+  if (m_original_outputs[child_index] == nullptr) {
+    LBANN_ERROR("original activation tensor of layer ", get_name(),
+                " is not set at index ", child_index);
+  }
   return *m_original_outputs[child_index];
 }
 
@@ -262,6 +266,16 @@ void data_type_distconv_layer<TensorDataType>::setup_original_activations() {
     m_activations_shuffler_last_mb[mode] = nullptr;
   }
 #endif
+}
+
+template <typename TensorDataType>
+void data_type_distconv_layer<TensorDataType>::
+set_original_activations_outermost_dimension(size_t dim) {
+  for (auto &t: m_original_outputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
 }
 
 #define PROTO(T)                                \

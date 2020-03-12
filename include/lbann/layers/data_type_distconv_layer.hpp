@@ -66,6 +66,8 @@ public:
   void setup_activations(const dc::Dist& dist, bool allocate=true) override;
   void setup_original_activations() override;
 
+  void set_original_activations_outermost_dimension(size_t dim);
+
  protected:
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_original_inputs;

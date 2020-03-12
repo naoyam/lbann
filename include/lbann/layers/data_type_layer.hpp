@@ -350,7 +350,7 @@ private:
   virtual const TensorDevType &get_activations_t() const;
   virtual TensorDevType &get_activations_t();
   virtual const TensorDevType &get_activations_t(const Layer &child) const;
-  virtual TensorDevType &get_activations_copyout();
+  //virtual TensorDevType &get_activations_copyout();
 
   virtual const TensorDevType &get_prev_error_signals_t() const;
   virtual TensorDevType &get_prev_error_signals_t();

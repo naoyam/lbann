@@ -1041,10 +1041,12 @@ typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorD
   return dc().get_activations();
 }
 
+#if 0
 template <typename TensorDataType>
 typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::get_activations_copyout() {
   return dc().get_original_activations();
 }
+#endif
 
 template <typename TensorDataType>
 const typename data_type_layer<TensorDataType>::TensorDevType &data_type_layer<TensorDataType>::
@@ -1191,7 +1193,7 @@ void data_type_layer<TensorDataType>::setup_activations_copyout_tensor(
         LBANN_ERROR("Copyout of non-first tensor not supported yet");
       }
       m_activations_shuffler = dc::get_tensor_shuffler(
-          dc().get_activations(), m_activations_copyout);
+          dc().get_activations(), get_activations_copyout());
       for (int mode = 0; mode < 3; ++mode) {
         m_activations_shuffler_last_mb[mode] = nullptr;
       }
@@ -1556,9 +1558,7 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
   dc().get_activations().set_outermost_dimension(mini_batch_size);
   assert_eq((int)dc().get_activations().get_shape()[-1],
             mini_batch_size);
-  dc().get_original_activations().set_outermost_dimension(mini_batch_size);
-  assert_eq((int)dc().get_original_activations().get_shape()[-1],
-            mini_batch_size);
+  dc().set_original_activations_outermost_dimension(mini_batch_size);
   // TODO: Needs to check other output tensors
   if (keep_original_output(0) && dc().get_original_activations().is_split_root()) {
     assert_eq((int)dc().get_original_activations().get_local_shape()[-1],
