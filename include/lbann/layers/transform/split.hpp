@@ -38,22 +38,27 @@
 namespace lbann {
 
 #ifdef LBANN_HAS_DISTCONV
-template <typename TensorDataType>
-class split_distconv_layer: public data_type_distconv_layer<TensorDataType> {
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+class split_distconv_adapter: public data_type_distconv_adapter<TensorDataType> {
  public:
-  using TensorDevType = typename data_type_distconv_layer<TensorDataType>::TensorDevType;
+  using TensorDevType = typename data_type_distconv_adapter<TensorDataType>::TensorDevType;
 
-  split_distconv_layer(Layer& layer): data_type_distconv_layer<TensorDataType>(layer) {}
-  virtual ~split_distconv_layer() = default;
+  split_distconv_adapter(Layer& layer): data_type_distconv_adapter<TensorDataType>(layer) {}
+  virtual ~split_distconv_adapter() = default;
+
+  dc::Shape get_activations_local_shape(int index) const override {
+    return data_type_distconv_adapter<TensorDataType>::get_activations_local_shape(0);
+  }
+
   void setup_activations(const dc::Dist& dist) override {
     const auto &parent_activations =
-        dynamic_cast<const TensorDevType&>(this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
+        dynamic_cast<const TensorDevType&>(
+            this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
     for (int i = 0; i < this->layer().get_num_children(); ++i) {
       this->m_outputs.emplace_back(make_unique<TensorDevType>(parent_activations));
     }
   }
 };
-
 #endif // LBANN_HAS_DISTCONV
 
 /** @brief Present input tensor to multiple outputs. */
@@ -94,12 +99,13 @@ protected:
 
 #ifdef LBANN_HAS_DISTCONV
  protected:
-  using TensorDevType = typename data_type_layer<TensorDataType>::TensorDevType;
-  std::vector<TensorDevType> m_prev_error_signals_siblings;
-
-  void setup_distconv_layer() override {
-    this->get_dc() = make_unique<split_distconv_layer<TensorDataType>>(*this);
+  void setup_distconv_adapter() override {
+    this->get_dc() = make_unique<split_distconv_adapter<
+      TensorDataType, T_layout, Dev>>(*this);
   }
+
+  split_distconv_adapter<TensorDataType, T_layout, Dev>& dc() override;
+  const split_distconv_adapter<TensorDataType, T_layout, Dev>& dc() const override;
 
   void fp_compute_distconv() {}
 
@@ -121,28 +127,25 @@ protected:
     equivalents[&layer_dists[2]].insert(&layer_dists[3]);
     equivalents[&layer_dists[3]].insert(&layer_dists[2]);
   }
-
-  void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    data_type_layer<TensorDataType>::setup_tensors_bwd(dists);
-    if (!this->distconv_enabled()) return;
-
-    this->setup_prev_error_signals_tensor(dists);
-    this->setup_error_signals_tensor(dists);
-    this->setup_error_signals_copyout_tensor(dists);
-
-    m_prev_error_signals_siblings.reserve(this->get_num_children() - 1);
-    for (int i = 1; i < this->get_num_children(); ++i) {
-      if (this->child_shuffle_required(i) || this->child_copy_out_required(i)) {
-        LBANN_ERROR("Copyout non-first tensor not supported");
-      }
-      m_prev_error_signals_siblings.emplace_back(
-          dynamic_cast<const data_type_layer<TensorDataType>*>(
-              this->get_child_layers()[i])->get_error_signals_t(*this));
-    }
-  }
-#endif
+#endif // LBANN_HAS_DISTCONV
 
 };
+
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+split_distconv_adapter<TensorDataType, T_layout, Dev>&
+split_layer<TensorDataType, T_layout, Dev>::dc() {
+  return const_cast<split_distconv_adapter<TensorDataType, T_layout, Dev>&>(
+      static_cast<const split_layer<TensorDataType, T_layout, Dev>&>(*this).dc());
+}
+
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+const split_distconv_adapter<TensorDataType, T_layout, Dev>&
+split_layer<TensorDataType, T_layout, Dev>::dc() const {
+  return dynamic_cast<const split_distconv_adapter<TensorDataType, T_layout, Dev>&>(
+      data_type_layer<TensorDataType>::dc());
+}
+#endif // LBANN_HAS_DISTCONV
 
 LBANN_DEFINE_LAYER_BUILDER(split);
 

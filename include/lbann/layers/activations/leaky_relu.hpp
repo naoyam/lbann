@@ -32,6 +32,21 @@
 
 namespace lbann {
 
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+class leaky_relu_distconv_adapter: public data_type_distconv_adapter<TensorDataType> {
+ public:
+  using TensorDevType = typename data_type_distconv_adapter<TensorDataType>::TensorDevType;
+
+  leaky_relu_distconv_adapter(Layer& layer): data_type_distconv_adapter<TensorDataType>(layer) {}
+  virtual ~leaky_relu_distconv_adapter() = default;
+
+  void setup_layer(size_t workspace_capacity) override;
+
+  std::unique_ptr<dc::LeakyReLU> m_leaky_relu;
+};
+#endif // LBANN_HAS_DISTCONV
+
 /** @brief
  *
  *  @f[
@@ -47,7 +62,7 @@ namespace lbann {
  *  nonlinearities improve neural network acoustic models." In
  *  Proc. ICML, vol. 30, no. 1, p. 3. 2013.
  */
-template <typename TensorDataType, data_layout Layout, El::Device Device>
+template <typename TensorDataType, data_layout Layout, El::Device Dev>
 class leaky_relu_layer : public data_type_layer<TensorDataType> {
 public:
   leaky_relu_layer(lbann_comm *comm, TensorDataType negative_slope = 0.01)
@@ -55,7 +70,7 @@ public:
   leaky_relu_layer* copy() const override { return new leaky_relu_layer(*this); }
   std::string get_type() const override { return "leaky ReLU"; }
   data_layout get_data_layout() const override { return Layout; }
-  El::Device get_device_allocation() const override { return Device; }
+  El::Device get_device_allocation() const override { return Dev; }
 
   description get_description() const override {
     auto desc = data_type_layer<TensorDataType>::get_description();
@@ -77,7 +92,14 @@ private:
 
 #ifdef LBANN_HAS_DISTCONV
  protected:
-  dc::LeakyReLU *m_leaky_relu;
+  void setup_distconv_adapter() override {
+    this->get_dc() = make_unique<leaky_relu_distconv_adapter<
+      TensorDataType, Layout, Dev>>(*this);
+  }
+
+  leaky_relu_distconv_adapter<TensorDataType, Layout, Dev>& dc() override;
+  const leaky_relu_distconv_adapter<TensorDataType, Layout, Dev>& dc() const override;
+
   void fp_compute_distconv();
   void bp_compute_distconv();
  public:
@@ -86,10 +108,31 @@ private:
       std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
       std::set<dc::Dist*> &updated,
       std::set<dc::Dist*> &invariants) override;
-
-  void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override;
 #endif // LBANN_HAS_DISTCONV
 };
+
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+leaky_relu_distconv_adapter<TensorDataType, T_layout, Dev>&
+leaky_relu_layer<TensorDataType, T_layout, Dev>::dc() {
+  return const_cast<leaky_relu_distconv_adapter<TensorDataType, T_layout, Dev>&>(
+      static_cast<const leaky_relu_layer<TensorDataType, T_layout, Dev>&>(*this).dc());
+}
+
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+const leaky_relu_distconv_adapter<TensorDataType, T_layout, Dev>&
+leaky_relu_layer<TensorDataType, T_layout, Dev>::dc() const {
+  return dynamic_cast<const leaky_relu_distconv_adapter<TensorDataType, T_layout, Dev>&>(
+      data_type_layer<TensorDataType>::dc());
+}
+
+template <typename TensorDataType, data_layout T_layout, El::Device Dev>
+void leaky_relu_distconv_adapter<TensorDataType, T_layout, Dev>::setup_layer(
+    size_t workspace_capacity) {
+  m_leaky_relu = make_unique<dc::LeakyReLU>(dc::get_backend());
+}
+#endif // LBANN_HAS_DISTCONV
+
 
 #ifndef LBANN_LEAKY_RELU_LAYER_INSTANTIATE
 #define PROTO_DEVICE(T, Device) \

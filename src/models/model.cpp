@@ -1442,17 +1442,21 @@ void model::setup_distconv() {
   // Setup fp tensors
   for (El::Int i = 0; i < get_num_layers(); ++i) {
     auto &layer = get_layer(i);
-    layer.setup_tensors_fwd(dists[&layer]);
+    if (!layer.distconv_enabled()) continue;
+    layer.dc().setup_fp_tensors(dists[&layer][0], dists[&layer][1]);
   }
-  // Setup bp tensors
+  // Setup bp tensors in an reverse order
   for (El::Int i = get_num_layers() - 1; i >= 0; --i) {
     auto &layer = get_layer(i);
-    layer.setup_tensors_bwd(dists[&layer]);
+    if (!layer.distconv_enabled()) continue;
+    layer.dc().setup_bp_tensors(dists[&layer][3], dists[&layer][2]);
   }
   // Final setup.
   auto workspace_capacity = get_workspace_capacity();
   for (El::Int i = 0; i < get_num_layers(); ++i) {
-    get_layer(i).setup_distconv_post(workspace_capacity);
+    auto &layer = get_layer(i);
+    if (!layer.distconv_enabled()) continue;
+    layer.dc().setup_layer(workspace_capacity);
   }
 }
 

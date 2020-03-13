@@ -38,7 +38,7 @@
 #include "lbann/utils/memory.hpp"
 #include "lbann/utils/typename.hpp"
 #include "lbann/utils/distconv.hpp"
-#include "lbann/layers/distconv_layer.hpp"
+#include "lbann/layers/distconv_adapter.hpp"
 #include <string>
 #include <vector>
 
@@ -578,7 +578,7 @@ private:
   friend std::vector<weights*> extract_weights(Layer& l);
 
 #ifdef LBANN_HAS_DISTCONV
-  friend class distconv_layer;
+  friend class distconv_adapter;
 
  public:
   /** Indicate whether distconv is supported. */
@@ -592,8 +592,8 @@ private:
   ParallelStrategy& get_parallel_strategy() { return m_parallel_strategy; }
   const ParallelStrategy& get_parallel_strategy() const { return m_parallel_strategy; }
 
-  virtual distconv_layer& dc() { return *m_dc; }
-  virtual const distconv_layer& dc() const { return *m_dc; }
+  virtual distconv_adapter& dc() { return *m_dc; }
+  virtual const distconv_adapter& dc() const { return *m_dc; }
 
   virtual void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
@@ -604,14 +604,10 @@ private:
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
       std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents);
 
-  virtual void setup_tensors_fwd(const std::array<dc::Dist, dc::num_dists> &dists) = 0;
-  virtual void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) = 0;
-  virtual void setup_distconv_post(size_t ws_size) = 0;
-
  protected:
-  virtual void setup_distconv_layer() = 0;
-  std::unique_ptr<distconv_layer>& get_dc() { return m_dc; };
-  const std::unique_ptr<distconv_layer>& get_dc() const { return m_dc; };
+  virtual void setup_distconv_adapter() = 0;
+  std::unique_ptr<distconv_adapter>& get_dc() { return m_dc; };
+  const std::unique_ptr<distconv_adapter>& get_dc() const { return m_dc; };
   virtual void fp_setup_distconv(El::Int mini_batch_size) = 0;
   virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
 
@@ -620,6 +616,7 @@ private:
   bool early_terminate_last_iteration() const;
   int get_exit_count() const;
 
+ public:
   /** Indicate whether backprop can be safely skipped. */
   bool skip_first_layer_bp() const;
 
@@ -631,7 +628,7 @@ private:
   /** Parallel strategy for the layer. */
   ParallelStrategy m_parallel_strategy;
 
-  std::unique_ptr<distconv_layer> m_dc;
+  std::unique_ptr<distconv_adapter> m_dc;
 #endif // LBANN_HAS_DISTCONV
 };
 

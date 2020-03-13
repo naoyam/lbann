@@ -101,7 +101,7 @@ void sum_layer<TensorDataType, Layout, Dev>::fp_compute() {
   if (this->distconv_enabled()) {
      fp_compute_distconv(
         this->get_num_parents(), this->dc());
-    this->copy_out_activations();
+     this->dc().copy_out_activations();
     if (!this->early_terminate_last_iteration()) {
       return;
     }

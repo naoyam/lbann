@@ -38,14 +38,12 @@ namespace lbann {
 
 #ifdef LBANN_HAS_DISTCONV
 template <typename TensorDataType>
-class sum_distconv_layer: public data_type_distconv_layer<TensorDataType> {
+class sum_distconv_adapter: public data_type_distconv_adapter<TensorDataType> {
  public:
-  using TensorDevType = typename data_type_distconv_layer<TensorDataType>::TensorDevType;
-  sum_distconv_layer(Layer& layer): data_type_distconv_layer<TensorDataType>(layer) {}
-  virtual ~sum_distconv_layer() = default;
-  void setup_prev_activations(const dc::Dist& dist) override {
-    data_type_distconv_layer<TensorDataType>::setup_prev_activations(dist);
-  }
+  using TensorDevType = typename data_type_distconv_adapter<TensorDataType>::TensorDevType;
+  sum_distconv_adapter(Layer& layer): data_type_distconv_adapter<TensorDataType>(layer) {}
+  virtual ~sum_distconv_adapter() = default;
+  void setup_error_signals(const dc::Dist& dist) override;
 };
 #endif // LBANN_HAS_DISTCONV
 
@@ -117,43 +115,25 @@ protected:
   void bp_compute() override {}
 
 #ifdef LBANN_HAS_DISTCONV
+  friend class sum_distconv_adapter<TensorDataType>;
  protected:
-  using TensorDevType = typename data_type_layer<TensorDataType>::TensorDevType;
-  std::vector<TensorDevType> m_error_signals_siblings;
-
- public:
-
-  using transform_layer<TensorDataType>::get_error_signals_t;
-
-  const TensorDevType &get_error_signals_t(const Layer &parent) const {
-    const auto parents = this->get_parent_layers();
-    for (int i = 0; i < (int)parents.size(); ++i) {
-      if (parents[i] == &parent) {
-        if (i == 0) {
-          return this->get_error_signals_t();
-        } else {
-          return m_error_signals_siblings[i-1];
-        }
-      }
-    }
-    LBANN_ERROR("No such parent found");
-  }
-
-  void setup_tensors_bwd(const std::array<dc::Dist, dc::num_dists> &dists) override {
-    transform_layer<TensorDataType>::setup_tensors_bwd(dists);
-    if (!this->distconv_enabled()) return;
-
-    this->setup_prev_error_signals_tensor(dists);
-    this->get_error_signals_t() = this->get_prev_error_signals_t();
-    for (int i = 1; i < this->get_num_parents(); ++i) {
-      m_error_signals_siblings.emplace_back(
-          this->get_prev_error_signals_t());
-    }
-    this->setup_error_signals_copyout_tensor(dists);
+  void setup_distconv_adapter() override {
+    this->get_dc() = make_unique<sum_distconv_adapter<TensorDataType>>(*this);
   }
 #endif // LBANN_HAS_DISTCONV
 
 };
+
+template <typename TensorDataType>
+void sum_distconv_adapter<TensorDataType>::setup_error_signals(
+    const dc::Dist& dist) {
+  this->m_gradient_wrt_inputs.clear();
+  this->m_gradient_wrt_inputs.resize(this->layer().get_num_parents());
+  for (int i = 0; i < this->layer().get_num_parents(); ++i) {
+    this->m_gradient_wrt_inputs[i]= make_unique<TensorDevType>(
+        this->get_prev_error_signals(0));
+  }
+}
 
 LBANN_DEFINE_LAYER_BUILDER(sum);
 

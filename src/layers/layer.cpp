@@ -631,6 +631,7 @@ void Layer::enable_distconv() {
     for (const auto &name: layer_names) {
       if (get_name() != name) continue;
       m_distconv_enabled = true;
+      setup_distconv_adapter();
       return;
     }
     dc::MPIRootPrintStreamInfo()
@@ -658,6 +659,10 @@ void Layer::enable_distconv() {
 
   // Finally, check whether a layer is supported by distconv.
   m_distconv_enabled = is_distconv_supported();
+
+  if (m_distconv_enabled) {
+    setup_distconv_adapter();
+  }
 }
 
 bool Layer::distconv_enabled() const {
