@@ -38,7 +38,9 @@
 #include "lbann/utils/memory.hpp"
 #include "lbann/utils/typename.hpp"
 #include "lbann/utils/distconv.hpp"
+#ifdef LBANN_HAS_DISTCONV
 #include "lbann/layers/distconv_adapter.hpp"
+#endif // LBANN_HAS_DISTCONV
 #include <string>
 #include <vector>
 

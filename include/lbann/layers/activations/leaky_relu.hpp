@@ -62,7 +62,7 @@ class leaky_relu_distconv_adapter: public data_type_distconv_adapter<TensorDataT
  *  nonlinearities improve neural network acoustic models." In
  *  Proc. ICML, vol. 30, no. 1, p. 3. 2013.
  */
-template <typename TensorDataType, data_layout Layout, El::Device Dev>
+template <typename TensorDataType, data_layout Layout, El::Device Device>
 class leaky_relu_layer : public data_type_layer<TensorDataType> {
 public:
   leaky_relu_layer(lbann_comm *comm, TensorDataType negative_slope = 0.01)
@@ -70,7 +70,7 @@ public:
   leaky_relu_layer* copy() const override { return new leaky_relu_layer(*this); }
   std::string get_type() const override { return "leaky ReLU"; }
   data_layout get_data_layout() const override { return Layout; }
-  El::Device get_device_allocation() const override { return Dev; }
+  El::Device get_device_allocation() const override { return Device; }
 
   description get_description() const override {
     auto desc = data_type_layer<TensorDataType>::get_description();
@@ -94,11 +94,11 @@ private:
  protected:
   void setup_distconv_adapter() override {
     this->get_dc() = make_unique<leaky_relu_distconv_adapter<
-      TensorDataType, Layout, Dev>>(*this);
+      TensorDataType, Layout, Device>>(*this);
   }
 
-  leaky_relu_distconv_adapter<TensorDataType, Layout, Dev>& dc() override;
-  const leaky_relu_distconv_adapter<TensorDataType, Layout, Dev>& dc() const override;
+  leaky_relu_distconv_adapter<TensorDataType, Layout, Device>& dc() override;
+  const leaky_relu_distconv_adapter<TensorDataType, Layout, Device>& dc() const override;
 
   void fp_compute_distconv();
   void bp_compute_distconv();
