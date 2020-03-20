@@ -633,48 +633,6 @@ bool Layer::distconv_enabled() const {
   }
 
   if (!m_distconv_enabled_set) {
-    // When DISTCONV_ENABLE is defined, all layers included in the
-    // variable string are enabled.
-    auto *env = std::getenv("DISTCONV_ENABLE");
-    if (env) {
-      std::string s(env);
-      auto layer_names = dc::util::split(s, ',');
-      for (const auto &name: layer_names) {
-        if (get_name() != name) continue;
-        m_distconv_enabled = true;
-        m_distconv_enabled_set = true;
-        break;
-      }
-      if (!m_distconv_enabled_set) {
-        dc::MPIRootPrintStreamInfo()
-            << "Disable " << get_name()
-            << " as its name is not found in DISTCONV_ENABLE";
-        m_distconv_enabled = false;
-        m_distconv_enabled_set = true;
-      }
-    }
-  }
-
-  if (!m_distconv_enabled_set) {
-    // It is also disabled when the layer name is included in
-    // environment variable DISTCONV_DISABLE.
-    auto *env = std::getenv("DISTCONV_DISABLE");
-    if (env) {
-      std::string s(env);
-      auto layer_names = dc::util::split(s, ',');
-      for (const auto &name: layer_names) {
-        if (get_name() != name) continue;
-        dc::MPIRootPrintStreamInfo()
-            << "Disable " << get_name()
-            << " as its name found in DISTCONV_DISABLE";
-        m_distconv_enabled = false;
-        m_distconv_enabled_set = true;
-        break;
-      }
-    }
-  }
-
-  if (!m_distconv_enabled_set) {
     // Finally, check whether a layer is supported by distconv.
     m_distconv_enabled = is_distconv_supported();
     m_distconv_enabled_set = true;
