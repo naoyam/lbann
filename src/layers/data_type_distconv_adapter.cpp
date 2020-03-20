@@ -543,9 +543,9 @@ set_original_activations_outermost_dimension(size_t dim) {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_size) {
+  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   // Reconfigure the sample dimension as the mini batch size may vary
   // at the end of epoch
-  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   get_prev_activations().set_outermost_dimension(mini_batch_size);
   assert_eq((int)get_prev_activations().get_shape()[-1],
             mini_batch_size);
@@ -581,8 +581,49 @@ void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_siz
     assert_eq((int)get_original_activations().get_local_shape()[-1],
               l.get_activations().LocalWidth());
   }
-
   ensure_prev_activations();
+}
+
+template <typename TensorDataType>
+void data_type_distconv_adapter<TensorDataType>::bp_setup(El::Int mini_batch_size) {
+  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  // Reconfigure the sample dimension as the mini batch size may vary
+  // at the end of epoch
+  for (int i = 0; i < l.get_num_children(); ++i) {
+    get_prev_error_signals(i).set_outermost_dimension(mini_batch_size);
+    assert_always((int)get_prev_error_signals(i).get_shape()[-1] ==
+                  mini_batch_size);
+    if (child_copy_out_required(i) || child_shuffle_required(i)) {
+      auto &original_input = get_original_prev_error_signals(i);
+      if (i != 0) {
+        LBANN_ERROR("Copyout non-first tensor not supported");
+      }
+      original_input.set_outermost_dimension(mini_batch_size);
+      assert_eq((int)original_input.get_shape()[-1],
+                mini_batch_size);
+      if (child_copy_out_required(i) &&
+          original_input.is_split_root()) {
+        assert_eq(
+            (int)original_input.get_local_shape()[-1],
+            l.get_prev_error_signals().LocalWidth());
+      }
+    }
+    get_error_signals().set_outermost_dimension(mini_batch_size);
+    assert_eq((int)get_error_signals().get_shape()[-1],
+              mini_batch_size);
+    get_original_error_signals().set_outermost_dimension(mini_batch_size);
+    assert_eq((int)get_original_error_signals().get_shape()[-1],
+              mini_batch_size);
+    // TODO: Check other input tensors
+    if (i == 0) {
+      if (keep_original_input(i) && !l.skip_first_layer_bp()
+          && get_original_error_signals().is_split_root()) {
+        assert_eq((int)get_original_error_signals().get_local_shape()[-1],
+                  l.get_error_signals().LocalWidth());
+      }
+    }
+  }
+  ensure_prev_error_signals();
 }
 
 namespace {

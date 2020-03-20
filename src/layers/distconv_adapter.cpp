@@ -41,18 +41,11 @@ std::string distconv_adapter::get_name() const {
 }
 
 int distconv_adapter::get_num_dims() const {
-  // Use the dimension of either input or output data.
-  auto nd = layer().get_num_parents() > 0 ? layer().get_input_dims().size() :
-      layer().get_output_dims().size();
-  nd += 1; // input and output dimensions do not have the sample dimension.
-  if (!(nd == 4 || nd == 5)) {
-    LBANN_ERROR(get_name(), ": Unsupported number of dimensions: ", nd);
-  }
-  return nd;
+  return layer().get_num_dims();
 }
 
 int distconv_adapter::get_num_spatial_dims() const {
-  return get_num_dims() - 2;
+  return layer().get_num_spatial_dims();
 }
 
 dc::Dist &distconv_adapter::get_prev_activations_dist() {

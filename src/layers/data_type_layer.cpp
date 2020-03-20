@@ -146,7 +146,7 @@ void data_type_layer<TensorDataType>::back_prop() {
 #endif // defined(LBANN_HAS_GPU) && defined(LBANN_DEBUG)
 
 #ifdef LBANN_HAS_DISTCONV
-  bp_setup_distconv(mini_batch_size);
+  if (distconv_enabled()) dc().bp_setup(mini_batch_size);
 #endif // LBANN_HAS_DISTCONV
 
   // Backprop the compute function.
@@ -680,22 +680,6 @@ const data_type_distconv_adapter<TensorDataType>& data_type_layer<TensorDataType
   return dynamic_cast<const data_type_distconv_adapter<TensorDataType>&>(*get_dc());
 }
 
-template <typename TensorDataType>
-int data_type_layer<TensorDataType>::get_num_dims() const {
-  // Use the dimension of either input or output data.
-  auto nd = get_num_parents() > 0 ? get_input_dims().size() :
-      get_output_dims().size();
-  nd += 1; // input and output dimensions do not have the sample dimension.
-  if (!(nd == 4 || nd == 5)) {
-    LBANN_ERROR(get_name(), ": Invalid number of dimensions: ", nd);
-  }
-  return nd;
-}
-
-template <typename TensorDataType>
-int data_type_layer<TensorDataType>::get_num_spatial_dims() const {
-  return get_num_dims() - 2;
-}
 #if 0
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size) {
@@ -741,7 +725,6 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
 
   dc().ensure_prev_activations();
 }
-#endif
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size) {
   if (!distconv_enabled()) return;
@@ -784,6 +767,7 @@ void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size)
   }
   dc().ensure_prev_error_signals();
 }
+#endif
 #endif // LBANN_HAS_DISTCONV
 
 #define PROTO(T)                     \

@@ -592,13 +592,16 @@ private:
 #ifdef LBANN_HAS_DISTCONV
   friend class distconv_adapter;
  public:
+  int get_num_dims() const;
+  int get_num_spatial_dims() const;
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
-
   /** Retrievs distconv adapter. */
   virtual const distconv_adapter& dc() const { return *m_dc; }
   /** Retrievs distconv adapter. */
   virtual distconv_adapter& dc() { return *m_dc; }
+  /** Indicate whether backprop can be safely skipped. */
+  bool skip_first_layer_bp() const;
 
  protected:
   /** Indicate whether distconv is supported. */
@@ -608,12 +611,6 @@ private:
   virtual void setup_distconv_adapter() = 0;
   std::unique_ptr<distconv_adapter>& get_dc() { return m_dc; };
   const std::unique_ptr<distconv_adapter>& get_dc() const { return m_dc; };
-
-  virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
-
- public:
-  /** Indicate whether backprop can be safely skipped. */
-  bool skip_first_layer_bp() const;
 
  private:
   mutable bool m_distconv_enabled = false;
