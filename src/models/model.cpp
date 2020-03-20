@@ -1450,20 +1450,19 @@ void model::find_valid_tensor_overlap() {
   std::set<dc::Dist*> invariants;
   // Initialize the distributions and constraints
   for (El::Int i = 0; i < get_num_layers(); ++i) {
+    if (!get_layer(i).distconv_enabled()) continue;
     get_layer(i).dc().setup_distributions(equivalents, updated, invariants);
   }
   // Add inter-layer distribution constraints
   for (El::Int i = 0; i < get_num_layers(); ++i) {
+    if (!get_layer(i).distconv_enabled()) continue;
     get_layer(i).dc().impose_adjacent_distribution_constraints(equivalents);
   }
   // Solve the constraints
   while (updated.size() > 0) {
-    dc::MPIRootPrintStreamDebug() << "# of updated dists: " << updated.size();
     std::set<dc::Dist*> updated_new;
     for (const auto d: updated) {
-      dc::MPIRootPrintStreamDebug() << "Updated: " << *d;
       for (auto p: equivalents[d]) {
-        dc::MPIRootPrintStreamDebug() << "Equivalent dist: " << *p;
         if (d->get_overlap() != p->get_overlap()) {
           // p must have equal dist as d but is different.
           if (invariants.find(p) != invariants.end()) {
