@@ -123,8 +123,6 @@ using CrossEntropy = ::distconv::CrossEntropy<Backend>;
 using ::distconv::get_sample_dim;
 using ::distconv::get_channel_dim;
 
-static constexpr int num_dists = 4;
-
 int get_strided_mpi_rank(MPI_Comm comm);
 MPI_Comm get_strided_mpi_comm(MPI_Comm comm);
 

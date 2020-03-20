@@ -784,31 +784,6 @@ void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size)
   }
   dc().ensure_prev_error_signals();
 }
-
-template <typename TensorDataType>
-size_t data_type_layer<TensorDataType>::estimate_memory_usage(
-    const std::array<dc::Dist, dc::num_dists> &dists) {
-  if (!distconv_enabled()) {
-    return 0;
-  }
-  auto max_mb = this->m_model->get_max_mini_batch_size();
-  size_t usage = 0;
-  // fp
-  for (int i = 0; i < get_num_parents(); ++i) {
-    if (dc().parent_copy_in_required(i) || dc().parent_shuffle_required(i)) {
-      usage += get_input_size(i) * max_mb / dists[0].get_split_shape().size();
-    }
-  }
-  usage += get_output_size() * max_mb / dists[1].get_split_shape().size();
-  // bp
-  for (int i = 0; i < get_num_children(); ++i) {
-    if (dc().child_copy_out_required(i) || dc().child_shuffle_required(i)) {
-      usage += get_output_size(i) * max_mb / dists[3].get_split_shape().size();
-    }
-  }
-  usage += get_input_size() * max_mb / dists[2].get_split_shape().size();
-  return usage * sizeof(TensorDataType);
-}
 #endif // LBANN_HAS_DISTCONV
 
 #define PROTO(T)                     \

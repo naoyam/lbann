@@ -1444,7 +1444,6 @@ void model::setup_distconv() {
 }
 
 void model::find_valid_tensor_overlap() {
-  // Dist[dc::num_dists]: {x, y, dx, dy}
   std::map<dc::Dist*, std::set<dc::Dist*>> equivalents;
   std::set<dc::Dist*> updated;
   std::set<dc::Dist*> invariants;

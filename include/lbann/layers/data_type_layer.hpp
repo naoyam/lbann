@@ -334,8 +334,6 @@ private:
 
   virtual void fp_setup_distconv(El::Int mini_batch_size) override;
   virtual void bp_setup_distconv(El::Int mini_batch_size) override;
-
-  virtual size_t estimate_memory_usage(const std::array<dc::Dist, dc::num_dists> &dists);
 #endif // LBANN_HAS_DISTCONV
 
 #ifdef LBANN_HAS_CUDA
