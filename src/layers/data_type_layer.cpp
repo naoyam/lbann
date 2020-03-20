@@ -691,7 +691,7 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
   assert_eq((int)dc().get_prev_activations().get_shape()[-1],
             mini_batch_size);
   for (int i = 0; i < get_num_parents(); ++i) {
-    if (dc().parent_copy_in_required(i) || dc().parent_shuffle_required(i)) {
+    if (dc().parent_copy_required(i) || dc().parent_shuffle_required(i)) {
       if (i != 0) {
         LBANN_ERROR("Copyin non-first tensor not supported");
       }
@@ -699,7 +699,7 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
           mini_batch_size);
       assert_eq((int)dc().get_original_prev_activations().get_shape()[-1],
                 mini_batch_size);
-      if (dc().parent_copy_in_required(i)) {
+      if (dc().parent_copy_required(i)) {
         // then, parent is assumed to be data parallel, so the local
         // size of the sample dimension should be equal to
         // the local width of previous activations. The check only
@@ -735,7 +735,7 @@ void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size)
     dc().get_prev_error_signals(i).set_outermost_dimension(mini_batch_size);
     assert_always((int)dc().get_prev_error_signals(i).get_shape()[-1] ==
                   mini_batch_size);
-    if (dc().child_copy_out_required(i) || dc().child_shuffle_required(i)) {
+    if (dc().child_copy_required(i) || dc().child_shuffle_required(i)) {
       auto &original_input = dc().get_original_prev_error_signals(i);
       if (i != 0) {
         LBANN_ERROR("Copyout non-first tensor not supported");
@@ -743,7 +743,7 @@ void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size)
       original_input.set_outermost_dimension(mini_batch_size);
       assert_eq((int)original_input.get_shape()[-1],
                 mini_batch_size);
-      if (dc().child_copy_out_required(i) &&
+      if (dc().child_copy_required(i) &&
           original_input.is_split_root()) {
         assert_eq(
             (int)original_input.get_local_shape()[-1],

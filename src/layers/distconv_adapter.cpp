@@ -114,12 +114,12 @@ void distconv_adapter::setup_bp_tensors() {
   setup_original_error_signals();
 }
 
-bool distconv_adapter::parent_copy_in_required(size_t input_index) const {
-  if (input_index < m_parent_copy_in_required.size()) {
-    return m_parent_copy_in_required.at(input_index);
+bool distconv_adapter::parent_copy_required(size_t input_index) const {
+  if (input_index < m_parent_copy_required.size()) {
+    return m_parent_copy_required.at(input_index);
   } else {
-    LBANN_ERROR("Out of range error! parent_copy_in_required size: ",
-                m_parent_copy_in_required.size(),
+    LBANN_ERROR("Out of range error! parent_copy_required size: ",
+                m_parent_copy_required.size(),
                 ", index: ", input_index);
   }
 }
@@ -134,12 +134,12 @@ bool distconv_adapter::parent_shuffle_required(size_t input_index) const {
   }
 }
 
-bool distconv_adapter::child_copy_out_required(size_t output_index) const {
-  if (output_index < m_child_copy_out_required.size()) {
-    return m_child_copy_out_required.at(output_index);
+bool distconv_adapter::child_copy_required(size_t output_index) const {
+  if (output_index < m_child_copy_required.size()) {
+    return m_child_copy_required.at(output_index);
   } else {
-    LBANN_ERROR("Out of range error! child_copy_out_required size: ",
-                m_child_copy_out_required.size(),
+    LBANN_ERROR("Out of range error! child_copy_required size: ",
+                m_child_copy_required.size(),
                 ", index: ", output_index);
   }
 }
@@ -159,14 +159,14 @@ void distconv_adapter::setup_inter_layer_adaptation() {
 
   const auto &ps = layer().get_parallel_strategy();
   for (const auto &p: layer().get_parent_layers()) {
-    m_parent_copy_in_required.push_back(!p->distconv_enabled());
+    m_parent_copy_required.push_back(!p->distconv_enabled());
     m_parent_shuffle_required.push_back(
         (!p->distconv_enabled()) ||
         (ps != p->get_parallel_strategy()));
   }
 
   for (const auto &c: layer().get_child_layers()) {
-    m_child_copy_out_required.push_back(!c->distconv_enabled());
+    m_child_copy_required.push_back(!c->distconv_enabled());
     m_child_shuffle_required.push_back(
         (!c->distconv_enabled()) ||
         (ps != c->get_parallel_strategy()));
@@ -176,7 +176,7 @@ void distconv_adapter::setup_inter_layer_adaptation() {
   std::stringstream parent_copyin_ss;
   std::stringstream parent_shuffle_ss;
   for (int i = 0; i < layer().get_num_parents(); ++i) {
-    if (m_parent_copy_in_required[i]) {
+    if (m_parent_copy_required[i]) {
       parent_copyin_ss << " " << i;
     }
     if (m_parent_shuffle_required[i]) {
@@ -186,7 +186,7 @@ void distconv_adapter::setup_inter_layer_adaptation() {
   std::stringstream child_copyout_ss;
   std::stringstream child_shuffle_ss;
   for (int i = 0; i < layer().get_num_children(); ++i) {
-    if (m_child_copy_out_required[i]) {
+    if (m_child_copy_required[i]) {
       child_copyout_ss << " " << i;
     }
     if (m_child_shuffle_required[i]) {
@@ -213,10 +213,10 @@ void distconv_adapter::setup_inter_layer_adaptation() {
 void distconv_adapter::setup_keep_original_tensors() {
   assert_always(layer().distconv_enabled());
   bool env_set = std::getenv("DISTCONV_KEEP_ORIGINAL_TENSORS") != nullptr;
-  for (auto b: m_parent_copy_in_required) {
+  for (auto b: m_parent_copy_required) {
     m_keep_original_input.push_back(env_set || b);
   }
-  for (auto b: m_child_copy_out_required) {
+  for (auto b: m_child_copy_required) {
     m_keep_original_output.push_back(env_set || b);
   }
   return;

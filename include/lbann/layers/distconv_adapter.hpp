@@ -85,9 +85,9 @@ public:
   void setup_inter_layer_adaptation();
   void setup_keep_original_tensors();
 
-  bool parent_copy_in_required(size_t input_index) const;
+  bool parent_copy_required(size_t input_index) const;
   bool parent_shuffle_required(size_t input_index) const;
-  bool child_copy_out_required(size_t output_index) const;
+  bool child_copy_required(size_t output_index) const;
   bool child_shuffle_required(size_t output_index) const;
 
   bool keep_original_input(size_t input_index) const;
@@ -111,9 +111,9 @@ public:
   std::vector<dc::Dist> m_prev_error_signals_dists;
   std::vector<dc::Dist> m_error_signals_dists;
 
-  std::vector<bool> m_parent_copy_in_required;
+  std::vector<bool> m_parent_copy_required;
   std::vector<bool> m_parent_shuffle_required;
-  std::vector<bool> m_child_copy_out_required;
+  std::vector<bool> m_child_copy_required;
   std::vector<bool> m_child_shuffle_required;
 
   std::vector<bool> m_keep_original_input;
