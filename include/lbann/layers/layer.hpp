@@ -595,15 +595,6 @@ private:
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
 
-  virtual void init_distribution(
-      std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
-      std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &invariants) = 0;
-  virtual void setup_tensor_distribution_add_adjacent_equivalence(
-      std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents);
-
   /** Retrievs distconv adapter. */
   virtual const distconv_adapter& dc() const { return *m_dc; }
   /** Retrievs distconv adapter. */

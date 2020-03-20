@@ -301,12 +301,12 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_prev_activations
 }
 
 template <typename TensorDataType>
-void data_type_distconv_adapter<TensorDataType>::setup_prev_activations(
-    const dc::Dist& dist) {
+void data_type_distconv_adapter<TensorDataType>::setup_prev_activations() {
   auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   const auto shape = get_prev_activations_shape();
   const auto local_shape = get_prev_activations_local_shape();
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+  const auto &dist = this->get_prev_activations_dist();
 
   for (int i = 0; i < l.get_num_parents(); ++i) {
     if (parent_copy_in_required(i) || parent_shuffle_required(i)) {
@@ -396,10 +396,10 @@ dc::Shape data_type_distconv_adapter<TensorDataType>::get_error_signals_local_sh
 }
 
 template <typename TensorDataType>
-void data_type_distconv_adapter<TensorDataType>::setup_activations(
-    const dc::Dist& dist) {
+void data_type_distconv_adapter<TensorDataType>::setup_activations() {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const dc::Shape output_tensor_shape = get_activations_shape();
+  const auto &dist = this->get_activations_dist();
   const auto activations_local_shape =
       get_activations_local_shape();
   m_outputs.emplace_back(make_unique<TensorDevType>(
@@ -436,12 +436,12 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_activations() {
 }
 
 template <typename TensorDataType>
-void data_type_distconv_adapter<TensorDataType>::setup_prev_error_signals(
-    const dc::Dist& dist) {
+void data_type_distconv_adapter<TensorDataType>::setup_prev_error_signals() {
   auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   const auto shape = get_prev_error_signals_shape();
   const auto local_shape = get_prev_error_signals_local_shape();
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+  const auto &dist = this->get_prev_error_signals_dist();
 
   for (int i = 0; i < l.get_num_children(); ++i) {
     if (child_copy_out_required(i) || child_shuffle_required(i)) {
@@ -497,11 +497,11 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_prev_error_signa
 }
 
 template <typename TensorDataType>
-void data_type_distconv_adapter<TensorDataType>::setup_error_signals(
-    const dc::Dist& dist) {
+void data_type_distconv_adapter<TensorDataType>::setup_error_signals() {
   const auto shape = get_error_signals_shape();
   const auto local_shape = get_error_signals_local_shape();
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+  const auto &dist = this->get_error_signals_dist();
   m_gradient_wrt_inputs.emplace_back(make_unique<TensorDevType>(
       shape, loc, dist, local_shape));
   if (layer().skip_first_layer_bp()) {

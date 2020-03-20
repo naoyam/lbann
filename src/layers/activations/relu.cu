@@ -82,31 +82,6 @@ void relu_layer<TensorDataType, Layout, Device>::bp_compute() {
 }
 
 #ifdef LBANN_HAS_DISTCONV
-using dc::Dist;
-
-template <typename TensorDataType, data_layout Layout, El::Device Device>
-void relu_layer<TensorDataType, Layout, Device>::init_distribution(
-    std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
-    std::map<dc::Dist*, std::set<dc::Dist*>> &invariants,
-    std::set<dc::Dist*> &updated,
-    std::set<dc::Dist*> &fixed)  {
-  assert_always(Layout == data_layout::DATA_PARALLEL);
-  data_type_layer<TensorDataType>::init_distribution(
-      dists, invariants, updated, fixed);
-  if (!this->distconv_enabled()) return;
-  auto &layer_dists = dists[this];
-  // x == dx
-  invariants[&layer_dists[0]].insert(
-      &layer_dists[2]);
-  invariants[&layer_dists[2]].insert(
-      &layer_dists[0]);
-  //y == dy
-  invariants[&layer_dists[1]].insert(
-      &layer_dists[3]);
-  invariants[&layer_dists[3]].insert(
-      &layer_dists[1]);
-}
-
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 void relu_layer<TensorDataType, Layout, Device>::fp_compute_distconv() {
   assert_always(Layout == data_layout::DATA_PARALLEL);

@@ -326,12 +326,6 @@ private:
   data_type_distconv_adapter<TensorDataType>& dc() override;
   const data_type_distconv_adapter<TensorDataType>& dc() const override;
 
-  void init_distribution(
-      std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
-      std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents,
-      std::set<dc::Dist*> &updated,
-      std::set<dc::Dist*> &invariants) override;
-
  protected:
   void setup_distconv_adapter() override;
 

@@ -92,8 +92,8 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
     return *shfl;
   }
 
-  void setup_fp_tensors(const dc::Dist &input_dist,
-                        const dc::Dist &output_dist) override {
+  void setup_fp_tensors() override {
+    const auto &output_dist = this->get_activations_dist();
     const auto tensor_shape = this->get_activations_shape();
     const auto sample_dist = dc::get_hydrogen_data_parallel_distribution(
         this->get_num_dims());
@@ -143,7 +143,7 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
       setup_shuffler_buffers(m_input_host_view, m_input_host_tensor);
     }
 
-    this->setup_activations(output_dist);
+    this->setup_activations();
 
     // Keeps the same input type and convert to float on GPU
     m_input_dev = TensorDevInput(tensor_shape, loc, output_dist);

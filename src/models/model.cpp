@@ -1420,21 +1420,19 @@ bool model::save_model() {
 
 #ifdef LBANN_HAS_DISTCONV
 void model::setup_distconv() {
-  // Dist[dc::num_dists]: {x, y, dx, dy}
-  std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> dists;
-  find_valid_tensor_overlap(dists);
-  print_layer_distributions(dists);
+  find_valid_tensor_overlap();
+  print_layer_distributions();
   // Setup fp tensors
   for (El::Int i = 0; i < get_num_layers(); ++i) {
     auto &layer = get_layer(i);
     if (!layer.distconv_enabled()) continue;
-    layer.dc().setup_fp_tensors(dists[&layer][0], dists[&layer][1]);
+    layer.dc().setup_fp_tensors();
   }
   // Setup bp tensors in an reverse order
   for (El::Int i = get_num_layers() - 1; i >= 0; --i) {
     auto &layer = get_layer(i);
     if (!layer.distconv_enabled()) continue;
-    layer.dc().setup_bp_tensors(dists[&layer][3], dists[&layer][2]);
+    layer.dc().setup_bp_tensors();
   }
   // Final setup.
   auto workspace_capacity = get_workspace_capacity();
@@ -1445,20 +1443,18 @@ void model::setup_distconv() {
   }
 }
 
-void model::find_valid_tensor_overlap(
-    std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists) {
+void model::find_valid_tensor_overlap() {
   // Dist[dc::num_dists]: {x, y, dx, dy}
   std::map<dc::Dist*, std::set<dc::Dist*>> equivalents;
   std::set<dc::Dist*> updated;
   std::set<dc::Dist*> invariants;
   // Initialize the distributions and constraints
   for (El::Int i = 0; i < get_num_layers(); ++i) {
-    get_layer(i).init_distribution(dists, equivalents, updated, invariants);
+    get_layer(i).dc().setup_distributions(equivalents, updated, invariants);
   }
-  // Add equivalence constraints
+  // Add inter-layer distribution constraints
   for (El::Int i = 0; i < get_num_layers(); ++i) {
-    get_layer(i).setup_tensor_distribution_add_adjacent_equivalence(
-        dists, equivalents);
+    get_layer(i).dc().impose_adjacent_distribution_constraints(equivalents);
   }
   // Solve the constraints
   while (updated.size() > 0) {
@@ -1483,17 +1479,16 @@ void model::find_valid_tensor_overlap(
   }
 }
 
-void model::print_layer_distributions(
-    std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists) const {
+void model::print_layer_distributions() const {
   std::stringstream ss;
   for (El::Int i = 0; i < get_num_layers(); ++i) {
     const auto& layer = get_layer(i);
     if (layer.distconv_enabled()) {
       ss << layer.get_name()  << " disributions: "
-         << "prev_activations: " << dists[&layer][0]
-         << ", activations: " << dists[&layer][1]
-         << ", error_signals: " << dists[&layer][2]
-         << ", prev_error_signals: " << dists[&layer][3]
+         << "prev_activations: " << layer.dc().get_prev_activations_dist()
+         << ", activations: " << layer.dc().get_activations_dist()
+         << ", error_signals: " << layer.dc().get_error_signals_dist()
+         << ", prev_error_signals: " << layer.dc().get_prev_activations_dist()
          << "\n";
     } else {
       ss << layer.get_name() << ": distconv disabled" << "\n";
