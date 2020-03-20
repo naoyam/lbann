@@ -266,9 +266,7 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
   void setup_original_prev_error_signals() {}
   void setup_error_signals(const dc::Dist& dist) {}
   void setup_original_error_signals() {}
-  void setup_bp_tensors(const dc::Dist &prev_error_signal_dist,
-                        const dc::Dist &error_signal_dist) {}
-
+  void setup_bp_tensors() override {}
 };
 #endif // LBANN_HAS_DISTCONV
 
