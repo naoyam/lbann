@@ -677,18 +677,6 @@ void data_type_layer<TensorDataType>::bp_setup_gradient_wrt_inputs(El::Int mini_
 
 #ifdef LBANN_HAS_DISTCONV
 template <typename TensorDataType>
-void data_type_layer<TensorDataType>::setup_distconv() {
-  // enable_distconv() is assumed to have beeen done already.
-  setup_early_termination();
-  if (distconv_enabled()) {
-    dc().setup_inter_layer_adaptation();
-    dc().setup_keep_original_tensors();
-  }
-  setup_data();
-  if (using_gpus()) { setup_gpu(); }
-}
-
-template <typename TensorDataType>
 void data_type_layer<TensorDataType>::setup_distconv_adapter() {
   this->get_dc() = make_unique<data_type_distconv_adapter<TensorDataType>>(*this);
 }

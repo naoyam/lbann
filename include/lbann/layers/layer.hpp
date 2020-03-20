@@ -599,7 +599,7 @@ private:
   void enable_distconv();
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
-  virtual void setup_distconv() = 0;
+  void setup_distconv();
 
   virtual distconv_adapter& dc() { return *m_dc; }
   virtual const distconv_adapter& dc() const { return *m_dc; }

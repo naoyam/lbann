@@ -607,6 +607,17 @@ void Layer::set_layer_pointers(std::vector<Layer*> layers) {
 }
 
 #ifdef LBANN_HAS_DISTCONV
+void Layer::setup_distconv() {
+  // enable_distconv() is assumed to have beeen done already.
+  setup_early_termination();
+  if (distconv_enabled()) {
+    dc().setup_inter_layer_adaptation();
+    dc().setup_keep_original_tensors();
+  }
+  setup_data();
+  if (using_gpus()) { setup_gpu(); }
+}
+
 void Layer::enable_distconv() {
   // Distconv is disabled if no parallel strategy is defined. When no
   // strategy is defined, the layer has the default strategy of all

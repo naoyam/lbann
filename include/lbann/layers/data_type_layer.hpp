@@ -335,7 +335,6 @@ private:
       std::set<dc::Dist*> &invariants) override;
 
  protected:
-  void setup_distconv() override;
   void setup_distconv_adapter() override;
 
   virtual int get_num_dims() const;
