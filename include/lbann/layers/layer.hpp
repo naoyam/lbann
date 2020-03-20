@@ -631,6 +631,7 @@ private:
 
  private:
   bool m_distconv_enabled = false;
+  bool m_distconv_enabled_set = false;
   // Negative value disables early termination. DISTCONV_EARLY_TERMINATE
   // environment value will override if set.
   int m_exit_count = -1;

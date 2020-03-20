@@ -619,6 +619,10 @@ void Layer::setup_distconv() {
 }
 
 void Layer::enable_distconv() {
+  // Avoid executing this function multiple times
+  if (m_distconv_enabled_set) return;
+  m_distconv_enabled_set = true;
+
   // Distconv is disabled if no parallel strategy is defined. When no
   // strategy is defined, the layer has the default strategy of all
   // zeros, which is invalid, thus should not be used when distconv is
