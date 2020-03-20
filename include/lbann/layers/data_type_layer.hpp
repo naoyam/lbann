@@ -323,8 +323,6 @@ private:
 #ifdef LBANN_HAS_DISTCONV
   friend class data_type_distconv_adapter<TensorDataType>;
  public:
-  using TensorDevType = dc::TensorDev<TensorDataType>;
-
   data_type_distconv_adapter<TensorDataType>& dc() override;
   const data_type_distconv_adapter<TensorDataType>& dc() const override;
 
