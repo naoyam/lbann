@@ -591,17 +591,9 @@ private:
 
 #ifdef LBANN_HAS_DISTCONV
   friend class distconv_adapter;
-
  public:
-  /** Indicate whether distconv is supported. */
-  virtual bool is_distconv_supported() const { return true; }
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
-  /** Pre-initialize distconv attributes needed for setup_data(). */
-  void prepare_distconv();
-
-  virtual distconv_adapter& dc() { return *m_dc; }
-  virtual const distconv_adapter& dc() const { return *m_dc; }
 
   virtual void init_distribution(
       std::map<const Layer*, std::array<lbann::dc::Dist, dc::num_dists>> &dists,
@@ -612,10 +604,20 @@ private:
       std::map<const Layer*, std::array<dc::Dist, dc::num_dists>> &dists,
       std::map<dc::Dist*, std::set<dc::Dist*>> &equivalents);
 
+  /** Retrievs distconv adapter. */
+  virtual const distconv_adapter& dc() const { return *m_dc; }
+  /** Retrievs distconv adapter. */
+  virtual distconv_adapter& dc() { return *m_dc; }
+
  protected:
+  /** Indicate whether distconv is supported. */
+  virtual bool is_distconv_supported() const { return true; }
+  /** Pre-initialize distconv attributes needed for setup_data(). */
+  void prepare_distconv();
   virtual void setup_distconv_adapter() = 0;
   std::unique_ptr<distconv_adapter>& get_dc() { return m_dc; };
   const std::unique_ptr<distconv_adapter>& get_dc() const { return m_dc; };
+
   virtual void fp_setup_distconv(El::Int mini_batch_size) = 0;
   virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
 
