@@ -116,12 +116,6 @@ void data_type_layer<TensorDataType>::forward_prop() {
   fp_compute();
   m_fp_compute_time += get_time() - fp_compute_start;
 
-#ifdef LBANN_HAS_DISTCONV
-  if (early_terminate_last_iteration()) {
-    dc().dump_activations();
-  }
-#endif // LBANN_HAS_DISTCONV
-
   // Add this layer as a gradient source for weight optimizers
   for (auto&& w : get_data_type_weights()) {
     optimizer* opt = w->get_optimizer();
@@ -159,12 +153,6 @@ void data_type_layer<TensorDataType>::back_prop() {
   const auto bp_compute_start = get_time();
   bp_compute();
   m_bp_compute_time += get_time() - bp_compute_start;
-
-#ifdef LBANN_HAS_DISTCONV
-  if (early_terminate_last_iteration()) {
-    dc().dump_error_signals();
-  }
-#endif // LBANN_HAS_DISTCONV
 
   // Remove this layer as a gradient source for weight optimizers
   for (auto&& w : get_data_type_weights()) {
@@ -830,8 +818,6 @@ int data_type_layer<TensorDataType>::get_num_spatial_dims() const {
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size) {
   if (!distconv_enabled()) return;
-
-  early_terminate();
 
   // Reconfigure the sample dimension as the mini batch size may vary
   // at the end of epoch

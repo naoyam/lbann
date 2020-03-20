@@ -621,11 +621,6 @@ private:
   virtual void fp_setup_distconv(El::Int mini_batch_size) = 0;
   virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
 
-  void setup_early_termination();
-  void early_terminate();
-  bool early_terminate_last_iteration() const;
-  int get_exit_count() const;
-
  public:
   /** Indicate whether backprop can be safely skipped. */
   bool skip_first_layer_bp() const;
@@ -633,9 +628,6 @@ private:
  private:
   mutable bool m_distconv_enabled = false;
   mutable bool m_distconv_enabled_set = false;
-  // Negative value disables early termination. DISTCONV_EARLY_TERMINATE
-  // environment value will override if set.
-  int m_exit_count = -1;
   std::unique_ptr<distconv_adapter> m_dc;
 #endif // LBANN_HAS_DISTCONV
 };

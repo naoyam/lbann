@@ -240,12 +240,10 @@ int get_input_rank(const lbann_comm &comm);
 Dist get_hydrogen_data_parallel_distribution(int num_dims);
 
 template <typename Tensor>
-void dump_tensor(bool early_terminate, const Tensor &t, const std::string &path) {
-  if (std::getenv("DISTCONV_DUMP") && early_terminate) {
-    dc::MPIPrintStreamDebug() << "Dumping tensor to " << path;
-    cudaDeviceSynchronize();
-    distconv::dump_tensor(t, path, true);
-  }
+void dump_tensor(const Tensor &t, const std::string &path) {
+  dc::MPIPrintStreamDebug() << "Dumping tensor to " << path;
+  cudaDeviceSynchronize();
+  distconv::dump_tensor(t, path, true);
 }
 
 #ifndef LBANN_UTILS_DISTCONV_INSTANTIATE

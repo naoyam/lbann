@@ -607,7 +607,6 @@ void Layer::set_layer_pointers(std::vector<Layer*> layers) {
 
 #ifdef LBANN_HAS_DISTCONV
 void Layer::prepare_distconv() {
-  setup_early_termination();
   if (distconv_enabled()) {
     setup_distconv_adapter();
     dc().setup_inter_layer_adaptation();
@@ -639,34 +638,6 @@ bool Layer::distconv_enabled() const {
   }
 
   return m_distconv_enabled;
-}
-
-void Layer::setup_early_termination() {
-  char *count_str = std::getenv("DISTCONV_EARLY_TERMINATE");
-  if (count_str) {
-    m_exit_count = atoi(count_str);
-    dc::MPIRootPrintStreamInfo()
-        << "Exiting after " << m_exit_count << " iterations";
-  }
-}
-
-void Layer::early_terminate() {
-  if (m_exit_count == 0) {
-    dc::MPIPrintStreamDebug() << "Early terminate";
-    MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Finalize();
-    cudaDeviceReset();
-    exit(0);
-  }
-  if (m_exit_count > 0) --m_exit_count;
-}
-
-bool Layer::early_terminate_last_iteration() const {
-  return get_exit_count() == 0;
-}
-
-int Layer::get_exit_count() const {
-  return m_exit_count;
 }
 
 // TODO: Needs more robust implementation

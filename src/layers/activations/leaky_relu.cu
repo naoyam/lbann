@@ -142,21 +142,12 @@ void leaky_relu_layer<TensorDataType, Layout, Device>::fp_compute() {
   if (this->distconv_enabled()) {
     assert_always(Layout == data_layout::DATA_PARALLEL);
     fp_compute_distconv();
-    if (!this->early_terminate_last_iteration()) {
-      return;
-    }
-    // fall through the normal code path to obtain reference results
+    return;
   }
 #endif
   local_fp(this->m_negative_slope,
            this->get_local_prev_activations(),
            this->get_local_activations());
-#ifdef LBANN_HAS_DISTCONV
-  if (this->distconv_enabled() && this->early_terminate_last_iteration() &&
-      this->dc().keep_original()) {
-    this->dc().dump_original_activations();
-  }
-#endif // LBANN_HAS_DISTCONV
 }
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 void leaky_relu_layer<TensorDataType, Layout, Device>::bp_compute() {
@@ -164,21 +155,13 @@ void leaky_relu_layer<TensorDataType, Layout, Device>::bp_compute() {
   if (this->distconv_enabled()) {
     assert_always(Layout == data_layout::DATA_PARALLEL);
     bp_compute_distconv();
-    if (!this->early_terminate_last_iteration()) {
-      return;
-    }
+    return;
   }
 #endif // LBANN_HAS_DISTCONV
   local_bp(this->m_negative_slope,
            this->get_local_prev_activations(),
            this->get_local_prev_error_signals(),
            this->get_local_error_signals());
-#ifdef LBANN_HAS_DISTCONV
-  if (this->distconv_enabled() && this->early_terminate_last_iteration() &&
-      this->dc().keep_original()) {
-    this->dc().dump_original_error_signals();
-  }
-#endif // LBANN_HAS_DISTCONV
 }
 
 #ifdef LBANN_HAS_DISTCONV

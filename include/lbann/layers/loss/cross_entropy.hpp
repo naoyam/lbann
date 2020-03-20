@@ -179,10 +179,7 @@ public:
 #ifdef LBANN_HAS_DISTCONV
     if (this->distconv_enabled()) {
       fp_compute_distconv();
-      if (!this->early_terminate_last_iteration()) {
-        return;
-      }
-      // fall through the normal code path to obtain reference results
+      return;
     }
 #endif
 
@@ -196,13 +193,6 @@ public:
     local_fp_compute();
     this->get_comm()->allreduce(*m_workspace, m_workspace->RedundantComm());
     El::Copy(*m_workspace, this->get_activations());
-
-#ifdef LBANN_HAS_DISTCONV
-    if (this->distconv_enabled() && this->early_terminate_last_iteration() &&
-        this->dc().keep_original()) {
-      this->dc().dump_original_activations();
-    }
-#endif // LBANN_HAS_DISTCONV
   }
 
   void bp_compute() override {
@@ -210,9 +200,7 @@ public:
 #ifdef LBANN_HAS_DISTCONV
     if (this->distconv_enabled()) {
       bp_compute_distconv();
-      if (!this->early_terminate_last_iteration()) {
-        return;
-      }
+      return;
     }
 #endif // LBANN_HAS_DISTCONV
 
@@ -223,13 +211,6 @@ public:
 
     // Compute local gradients
     local_bp_compute();
-
-#ifdef LBANN_HAS_DISTCONV
-    if (this->distconv_enabled() && this->early_terminate_last_iteration() &&
-        this->dc().keep_original()) {
-      this->dc().dump_original_error_signals();
-    }
-#endif // LBANN_HAS_DISTCONV
   }
 
 private:

@@ -292,10 +292,6 @@ protected:
 #ifdef LBANN_HAS_DISTCONV
       if (this->distconv_enabled()) {
         fp_compute_distconv();
-        if (this->early_terminate_last_iteration() && this->dc().keep_original()) {
-          fp_compute_cudnn();
-          this->dc().dump_original_activations();
-        }
       } else {
         fp_compute_cudnn();
       }
@@ -312,10 +308,6 @@ protected:
 #ifdef LBANN_HAS_DISTCONV
       if (this->distconv_enabled()) {
         bp_compute_distconv();
-        if (this->early_terminate_last_iteration() && this->dc().keep_original()) {
-          bp_compute_cudnn();
-          this->dc().dump_original_error_signals();
-        }
       } else {
         bp_compute_cudnn();
       }

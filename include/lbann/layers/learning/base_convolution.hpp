@@ -1293,10 +1293,6 @@ private:
     this->dc().m_conv->forward(TensorDataType{1}, this->dc().get_prev_activations(),
                                *(this->dc().m_kernel),
                                TensorDataType{0}, this->dc().get_activations());
-    if (this->early_terminate_last_iteration()) {
-      dc::dump_tensor(this->early_terminate_last_iteration(),
-                      *(this->dc().m_kernel), this->get_name() + "_weights");
-    }
   }
 
   void apply_bias_distconv() {
@@ -1330,12 +1326,6 @@ private:
       TensorDataType dst_scale{0}, gradient_scale{0};
       auto& bias_gradient = bias_optimizer->get_gradient_buffer(
           dst_scale, gradient_scale, true);
-      // For comparison with the original LBANN, bias gradients will
-      // be calculated again with the original LBANN. Do not accumulate the
-      // gradients here as it would be otherwise accumulated twice.
-      if (this->early_terminate_last_iteration()) {
-        gradient_scale = TensorDataType{0};
-      }
       assert0(dc::tensor::View(*dc().m_bias_gradient,
                                bias_gradient.Buffer()));
       if (has_local_data) {

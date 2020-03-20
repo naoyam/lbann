@@ -685,10 +685,6 @@ void data_type_distconv_adapter<TensorDataType>::copy_out_error_signals() {
     return;
   }
 
-  // No need to copy back as the original layer compute function
-  // will be called
-  if (l.get_exit_count() == 0) return;
-
   for (int i = 0; i < l.get_num_parents(); ++i) {
     if (!parent_copy_in_required(i)) continue;
 
@@ -711,9 +707,7 @@ void data_type_distconv_adapter<TensorDataType>::copy_out_error_signals() {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::dump_activations() const {
-  const auto &l = dynamic_cast<const data_type_layer<TensorDataType>&>(layer());
-  dc::dump_tensor(l.early_terminate_last_iteration(),
-                  get_activations(), get_name() + "_activations");
+  dc::dump_tensor(get_activations(), get_name() + "_activations");
 }
 
 template <typename TensorDataType>
@@ -721,16 +715,13 @@ void data_type_distconv_adapter<TensorDataType>::dump_original_activations() {
   const auto &l = dynamic_cast<const data_type_layer<TensorDataType>&>(layer());
   assert0(dc::tensor::View(
       get_original_activations(), l.get_activations().LockedBuffer()));
-  dc::dump_tensor(l.early_terminate_last_iteration(),
-                  get_original_activations(),
+  dc::dump_tensor(get_original_activations(),
                   get_name() + "_activations_original");
 }
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::dump_error_signals() const {
-  const auto &l = dynamic_cast<const data_type_layer<TensorDataType>&>(layer());
-  dc::dump_tensor(l.early_terminate_last_iteration(),
-                  get_error_signals(0), get_name() + "_error_signals");
+  dc::dump_tensor(get_error_signals(0), get_name() + "_error_signals");
 }
 
 template <typename TensorDataType>
@@ -738,8 +729,7 @@ void data_type_distconv_adapter<TensorDataType>::dump_original_error_signals() {
   const auto &l = dynamic_cast<const data_type_layer<TensorDataType>&>(layer());
   assert0(dc::tensor::View(
       get_original_activations(), l.get_activations().LockedBuffer()));
-  dc::dump_tensor(l.early_terminate_last_iteration(),
-                  get_original_error_signals(0),
+  dc::dump_tensor(get_original_error_signals(0),
                   get_name() +  "_error_signals_original");
 }
 

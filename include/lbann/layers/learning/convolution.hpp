@@ -162,12 +162,6 @@ protected:
         this->distconv_forward();
         this->apply_bias_distconv();
         this->dc().copy_out_activations();
-        if (this->early_terminate_last_iteration() &&
-            this->dc().keep_original()) {
-          base_convolution_layer<TensorDataType, Device>::apply_convolution_cudnn(true);
-          base_convolution_layer<TensorDataType, Device>::apply_bias_cudnn();
-          this->dc().dump_original_activations();
-        }
       }
 #else
       base_convolution_layer<TensorDataType, Device>::apply_convolution_cudnn(true);
@@ -196,12 +190,6 @@ protected:
         }
         this->distconv_backward_filter();
         this->distconv_backward_data();
-        if (this->early_terminate_last_iteration() &&
-            this->dc().keep_original()) {
-          base_convolution_layer<TensorDataType, Device>::compute_gradients_cudnn(false);
-          base_convolution_layer<TensorDataType, Device>::apply_transposed_convolution_cudnn(false);
-          this->dc().dump_original_error_signals();
-        }
       }
 #else
       base_convolution_layer<TensorDataType, Device>::compute_gradients_cudnn(false);
