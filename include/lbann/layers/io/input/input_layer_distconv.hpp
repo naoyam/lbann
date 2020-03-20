@@ -267,6 +267,9 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
   void setup_error_signals(const dc::Dist& dist) {}
   void setup_original_error_signals() {}
   void setup_bp_tensors() override {}
+
+  // Nothing to do here as everything is done in fp_compute_distconv.
+  void fp_setup(El::Int mini_batch_size) override {}
 };
 #endif // LBANN_HAS_DISTCONV
 
@@ -308,11 +311,6 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
   void setup_distconv_adapter() override {
     this->get_dc() = make_unique<
       input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>>(*this);
-  }
-
-  void fp_setup_distconv(El::Int mini_batch_size) override {
-    if (!this->distconv_enabled()) return;
-    // Nothing to do here as everything is done in fp_compute_distconv.
   }
 
   void fp_compute_distconv() {

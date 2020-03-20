@@ -102,6 +102,8 @@ public:
     return m_outputs;
   }
 
+  void fp_setup(El::Int mini_batch_size) override;
+
   TensorShufflerType& get_prev_activations_shuffler(
       const TensorDevType &src, const TensorDevType &dst);
   TensorShufflerType& get_activations_shuffler(

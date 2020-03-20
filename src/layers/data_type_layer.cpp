@@ -108,7 +108,7 @@ void data_type_layer<TensorDataType>::forward_prop() {
 #endif // defined(LBANN_HAS_GPU) && defined(LBANN_DEBUG)
 
 #ifdef LBANN_HAS_DISTCONV
-  fp_setup_distconv(mini_batch_size);
+  if (distconv_enabled()) dc().fp_setup(mini_batch_size);
 #endif // LBANN_HAS_DISTCONV
 
   // Apply layer's compute function
@@ -696,7 +696,7 @@ template <typename TensorDataType>
 int data_type_layer<TensorDataType>::get_num_spatial_dims() const {
   return get_num_dims() - 2;
 }
-
+#if 0
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size) {
   if (!distconv_enabled()) return;
@@ -741,7 +741,7 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
 
   dc().ensure_prev_activations();
 }
-
+#endif
 template <typename TensorDataType>
 void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size) {
   if (!distconv_enabled()) return;

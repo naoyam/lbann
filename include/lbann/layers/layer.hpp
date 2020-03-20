@@ -609,7 +609,6 @@ private:
   std::unique_ptr<distconv_adapter>& get_dc() { return m_dc; };
   const std::unique_ptr<distconv_adapter>& get_dc() const { return m_dc; };
 
-  virtual void fp_setup_distconv(El::Int mini_batch_size) = 0;
   virtual void bp_setup_distconv(El::Int mini_batch_size) = 0;
 
  public:

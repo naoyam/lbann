@@ -541,6 +541,50 @@ set_original_activations_outermost_dimension(size_t dim) {
   }
 }
 
+template <typename TensorDataType>
+void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_size) {
+  // Reconfigure the sample dimension as the mini batch size may vary
+  // at the end of epoch
+  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  get_prev_activations().set_outermost_dimension(mini_batch_size);
+  assert_eq((int)get_prev_activations().get_shape()[-1],
+            mini_batch_size);
+  for (int i = 0; i < l.get_num_parents(); ++i) {
+    if (parent_copy_in_required(i) || parent_shuffle_required(i)) {
+      if (i != 0) {
+        LBANN_ERROR("Copyin non-first tensor not supported");
+      }
+      get_original_prev_activations().set_outermost_dimension(
+          mini_batch_size);
+      assert_eq((int)get_original_prev_activations().get_shape()[-1],
+                mini_batch_size);
+      if (parent_copy_in_required(i)) {
+        // then, parent is assumed to be data parallel, so the local
+        // size of the sample dimension should be equal to
+        // the local width of previous activations. The check only
+        // matters for split root processes as the rest just hold
+        // invalid copy of the root data.
+        if (get_original_prev_activations().is_split_root()) {
+          assert_eq(
+              (int)get_original_prev_activations().get_local_shape()[-1],
+              l.get_prev_activations().LocalWidth());
+        }
+      }
+    }
+  }
+  get_activations().set_outermost_dimension(mini_batch_size);
+  assert_eq((int)get_activations().get_shape()[-1],
+            mini_batch_size);
+  set_original_activations_outermost_dimension(mini_batch_size);
+  // TODO: Needs to check other output tensors
+  if (keep_original_output(0) && get_original_activations().is_split_root()) {
+    assert_eq((int)get_original_activations().get_local_shape()[-1],
+              l.get_activations().LocalWidth());
+  }
+
+  ensure_prev_activations();
+}
+
 namespace {
 template <typename TensorDataType>
 dc::TensorShuffler<TensorDataType> &get_shuffler(
