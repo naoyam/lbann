@@ -51,9 +51,7 @@
 #include <queue>
 #include <unordered_set>
 
-#ifdef LBANN_HAS_DISTCONV
 #include "lbann/utils/distconv.hpp"
-#endif
 
 namespace lbann {
 
@@ -596,6 +594,7 @@ void model::setup() {
 
   // Callback hooks at end of setup
   do_setup_end_cbs();
+
 }
 
 void model::setup_layer_topology() {
@@ -679,23 +678,8 @@ void model::setup_layers() {
     auto& l = get_layer(i);
     l.set_model(this);
     l.setup();
-    // Delay check_setup afeter setup_distconv
-#ifndef LBANN_HAS_DISTCONV
-    l.check_setup();
-#endif
-  }
-#ifdef LBANN_HAS_DISTCONV
-  // First, enable distconv. This needs to be done before calling setup_distconv.
-  for (El::Int i = 0; i < get_num_layers(); ++i) {
-    auto& l = get_layer(i);
-    l.enable_distconv();
-  }
-  for (El::Int i = 0; i < get_num_layers(); ++i) {
-    auto& l = get_layer(i);
-    l.setup_distconv();
     l.check_setup();
   }
-#endif
 }
 
 void model::setup_weights() {
@@ -1404,6 +1388,7 @@ void model::write_proto(lbann_data::Model* proto) {
   if (m_comm->am_world_master())
     proto->set_mini_batch_size(m_max_mini_batch_size);
 }
+
 
 bool model::save_weights(persist& p) {
   // write out fields we need to save a model's weights

@@ -595,11 +595,10 @@ private:
  public:
   /** Indicate whether distconv is supported. */
   virtual bool is_distconv_supported() const { return true; }
-  /** Enables distconv. */
-  void enable_distconv();
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
-  void setup_distconv();
+  /** Pre-initialize distconv attributes needed for setup_data(). */
+  void prepare_distconv();
 
   virtual distconv_adapter& dc() { return *m_dc; }
   virtual const distconv_adapter& dc() const { return *m_dc; }
@@ -630,8 +629,8 @@ private:
   bool skip_first_layer_bp() const;
 
  private:
-  bool m_distconv_enabled = false;
-  bool m_distconv_enabled_set = false;
+  mutable bool m_distconv_enabled = false;
+  mutable bool m_distconv_enabled_set = false;
   // Negative value disables early termination. DISTCONV_EARLY_TERMINATE
   // environment value will override if set.
   int m_exit_count = -1;

@@ -123,10 +123,6 @@ public:
     // implementing the reshape layer, or 2) giving a proper shape to
     // the ground-truth data.
     //
-    // Furthermore, we need to call enable_distconv() here since it it
-    // isnot yet called at this point. It will be called again, but
-    // that won't be harmful.
-    this->enable_distconv();
     if (this->distconv_enabled()) {
       return;
     }

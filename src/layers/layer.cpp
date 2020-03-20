@@ -368,12 +368,11 @@ void Layer::setup() {
   setup_pointers();
   setup_dims();
   setup_matrices(m_comm->get_trainer_grid());
-  // setup_data and setup_gpu are called from setup_distconv when
-  // distconv is used
-#ifndef LBANN_HAS_DISTCONV
+#ifdef LBANN_HAS_DISTCONV
+  prepare_distconv();
+#endif // LBANN_HAS_DISTCONV
   setup_data();
   if (using_gpus()) { setup_gpu(); }
-#endif // LBANN_HAS_DISTCONV
 }
 
 void Layer::setup_pointers() {
@@ -607,80 +606,80 @@ void Layer::set_layer_pointers(std::vector<Layer*> layers) {
 }
 
 #ifdef LBANN_HAS_DISTCONV
-void Layer::setup_distconv() {
-  // enable_distconv() is assumed to have beeen done already.
+void Layer::prepare_distconv() {
   setup_early_termination();
   if (distconv_enabled()) {
+    setup_distconv_adapter();
     dc().setup_inter_layer_adaptation();
     dc().setup_keep_original_tensors();
-  }
-  setup_data();
-  if (using_gpus()) { setup_gpu(); }
-}
-
-void Layer::enable_distconv() {
-  // Avoid executing this function multiple times
-  if (m_distconv_enabled_set) return;
-  m_distconv_enabled_set = true;
-
-  // Distconv is disabled if no parallel strategy is defined. When no
-  // strategy is defined, the layer has the default strategy of all
-  // zeros, which is invalid, thus should not be used when distconv is
-  // used.
-  const auto &ps = get_parallel_strategy();
-  ParallelStrategy default_zero_ps;
-  if (ps == default_zero_ps) {
-    dc::MPIRootPrintStreamDebug()
-        << "Disable " << get_name()
-        << " as it does not have a parallel strategy.";
-    m_distconv_enabled = false;
-    return;
-  }
-
-  // When DISTCONV_ENABLE is defined, all layers included in the
-  // variable string are enabled.
-  auto *env = std::getenv("DISTCONV_ENABLE");
-  if (env) {
-    std::string s(env);
-    auto layer_names = dc::util::split(s, ',');
-    for (const auto &name: layer_names) {
-      if (get_name() != name) continue;
-      m_distconv_enabled = true;
-      setup_distconv_adapter();
-      return;
-    }
-    dc::MPIRootPrintStreamInfo()
-        << "Disable " << get_name()
-        << " as its name is not found in DISTCONV_ENABLE";
-    m_distconv_enabled = false;
-    return;
-  }
-
-  // It is also disabled when the layer name is included in
-  // environment variable DISTCONV_DISABLE.
-  env = std::getenv("DISTCONV_DISABLE");
-  if (env) {
-    std::string s(env);
-    auto layer_names = dc::util::split(s, ',');
-    for (const auto &name: layer_names) {
-      if (get_name() != name) continue;
-      dc::MPIRootPrintStreamInfo()
-          << "Disable " << get_name()
-          << " as its name found in DISTCONV_DISABLE";
-      m_distconv_enabled = false;
-      return;
-    }
-  }
-
-  // Finally, check whether a layer is supported by distconv.
-  m_distconv_enabled = is_distconv_supported();
-
-  if (m_distconv_enabled) {
-    setup_distconv_adapter();
   }
 }
 
 bool Layer::distconv_enabled() const {
+  if (!m_distconv_enabled_set) {
+    // Distconv is disabled if no parallel strategy is defined. When no
+    // strategy is defined, the layer has the default strategy of all
+    // zeros, which is invalid, thus should not be used when distconv is
+    // used.
+    const auto &ps = get_parallel_strategy();
+    ParallelStrategy default_zero_ps;
+    if (ps == default_zero_ps) {
+      dc::MPIRootPrintStreamDebug()
+          << "Disable " << get_name()
+          << " as it does not have a parallel strategy.";
+      m_distconv_enabled = false;
+      m_distconv_enabled_set = true;
+    }
+  }
+
+  if (!m_distconv_enabled_set) {
+    // When DISTCONV_ENABLE is defined, all layers included in the
+    // variable string are enabled.
+    auto *env = std::getenv("DISTCONV_ENABLE");
+    if (env) {
+      std::string s(env);
+      auto layer_names = dc::util::split(s, ',');
+      for (const auto &name: layer_names) {
+        if (get_name() != name) continue;
+        m_distconv_enabled = true;
+        m_distconv_enabled_set = true;
+        break;
+      }
+      if (!m_distconv_enabled_set) {
+        dc::MPIRootPrintStreamInfo()
+            << "Disable " << get_name()
+            << " as its name is not found in DISTCONV_ENABLE";
+        m_distconv_enabled = false;
+        m_distconv_enabled_set = true;
+      }
+    }
+  }
+
+  if (!m_distconv_enabled_set) {
+    // It is also disabled when the layer name is included in
+    // environment variable DISTCONV_DISABLE.
+    auto *env = std::getenv("DISTCONV_DISABLE");
+    if (env) {
+      std::string s(env);
+      auto layer_names = dc::util::split(s, ',');
+      for (const auto &name: layer_names) {
+        if (get_name() != name) continue;
+        dc::MPIRootPrintStreamInfo()
+            << "Disable " << get_name()
+            << " as its name found in DISTCONV_DISABLE";
+        m_distconv_enabled = false;
+        m_distconv_enabled_set = true;
+        break;
+      }
+    }
+  }
+
+  if (!m_distconv_enabled_set) {
+    // Finally, check whether a layer is supported by distconv.
+    m_distconv_enabled = is_distconv_supported();
+    m_distconv_enabled_set = true;
+  }
+
   return m_distconv_enabled;
 }
 
