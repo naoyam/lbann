@@ -115,6 +115,8 @@ private:
 #ifdef LBANN_HAS_DISTCONV
   friend class concatenate_distconv_adapter<TensorDataType, Layout, Device>;
  protected:
+  bool is_distconv_supported() const override { return true; }
+
   void setup_distconv_adapter() override {
     this->get_dc() = make_unique<
       concatenate_distconv_adapter<TensorDataType, Layout, Device>>(*this);

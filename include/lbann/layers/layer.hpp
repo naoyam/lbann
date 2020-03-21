@@ -605,7 +605,7 @@ private:
 
  protected:
   /** Indicate whether distconv is supported. */
-  virtual bool is_distconv_supported() const { return true; }
+  virtual bool is_distconv_supported() const { return false; }
   /** Pre-initialize distconv attributes needed for setup_data(). */
   void prepare_distconv();
   virtual void setup_distconv_adapter() = 0;

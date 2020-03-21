@@ -305,6 +305,8 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
 #ifdef LBANN_HAS_DISTCONV
   friend class input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>;
  protected:
+  bool is_distconv_supported() const override { return true; }
+
   input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>& dc() override;
   const input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>& dc() const override;
 
