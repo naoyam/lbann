@@ -410,7 +410,7 @@ void data_type_layer<TensorDataType>::setup_data() {
   // memory, but there are some edge cases that are not handled.
   for (int i = 0; i < get_num_children(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().keep_original_output(i)) {
+    if (distconv_enabled() && !dc().child_copy_required(i)) {
       // Avoids allocating unused matrices
       continue;
     }
@@ -525,7 +525,7 @@ void data_type_layer<TensorDataType>::fp_setup_inputs(El::Int mini_batch_size) {
   // Iterate through input tensors
   for (int i = 0; i < get_num_parents(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().keep_original_input(i)) continue;
+    if (distconv_enabled() && !dc().parent_copy_required(i)) continue;
 #endif // LBANN_HAS_DISTCONV
     // Initialize input tensor
     const auto& parent = *m_parent_layers[i];
@@ -583,7 +583,7 @@ void data_type_layer<TensorDataType>::fp_setup_outputs(El::Int mini_batch_size) 
   // Initialize output tensors
   for (int i = 0; i < get_num_children(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().keep_original_output(i)) continue;
+    if (distconv_enabled() && !dc().child_copy_required(i)) continue;
 #endif // LBANN_HAS_DISTCONV
     auto& output = get_activations(i);
     output.Empty(false);
@@ -597,7 +597,7 @@ template <typename TensorDataType>
 void data_type_layer<TensorDataType>::bp_setup_gradient_wrt_outputs(El::Int mini_batch_size) {
   for (int i = 0; i < get_num_children(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().keep_original_output(i)) continue;
+    if (distconv_enabled() && !dc().child_copy_required(i)) continue;
 #endif // LBANN_HAS_DISTCONV
     // Initialize gradient w.r.t. output tensor
     const auto& child = *m_child_layers[i];
@@ -654,7 +654,7 @@ void data_type_layer<TensorDataType>::bp_setup_gradient_wrt_inputs(El::Int mini_
 
   for (int i = 0; i < get_num_parents(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().keep_original_input(i)) continue;
+    if (distconv_enabled() && !dc().parent_copy_required(i)) continue;
 #endif // LBANN_HAS_DISTCONV
     auto& gradient_wrt_input = get_error_signals(i);
     gradient_wrt_input.Empty(false);
@@ -718,7 +718,7 @@ void data_type_layer<TensorDataType>::fp_setup_distconv(El::Int mini_batch_size)
             mini_batch_size);
   dc().set_original_activations_outermost_dimension(mini_batch_size);
   // TODO: Needs to check other output tensors
-  if (dc().keep_original_output(0) && dc().get_original_activations().is_split_root()) {
+  if (dc().child_copy_required(0) && dc().get_original_activations().is_split_root()) {
     assert_eq((int)dc().get_original_activations().get_local_shape()[-1],
               get_activations().LocalWidth());
   }
@@ -758,7 +758,7 @@ void data_type_layer<TensorDataType>::bp_setup_distconv(El::Int mini_batch_size)
               mini_batch_size);
     // TODO: Check other input tensors
     if (i == 0) {
-      if (dc().keep_original_input(i) && !skip_first_layer_bp()
+      if (dc().parent_copy_required(i) && !skip_first_layer_bp()
           && dc().get_original_error_signals().is_split_root()) {
         assert_eq((int)dc().get_original_error_signals().get_local_shape()[-1],
                   get_error_signals().LocalWidth());

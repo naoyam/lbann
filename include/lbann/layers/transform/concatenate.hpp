@@ -256,7 +256,7 @@ void concatenate_layer<TensorDataType,Layout,Device>::setup_dims() {
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 void concatenate_layer<TensorDataType,Layout,Device>::fp_setup_outputs(El::Int mini_batch_size) {
 #ifdef LBANN_HAS_DISTCONV
-  if (this->distconv_enabled() && !this->dc().keep_original_output(0)) {
+  if (this->distconv_enabled() && !this->dc().child_copy_required(0)) {
     return;
   }
 #endif // LBANN_HAS_DISTCONV
@@ -325,14 +325,14 @@ void bp_setup_gradient_wrt_inputs_impl(
   const auto& output_grad = l.get_prev_error_signals();
   if (num_inputs == 1) {
 #ifdef LBANN_HAS_DISTCONV
-    if (l.distconv_enabled() && !l.dc().keep_original_input(0)) return;
+    if (l.distconv_enabled() && !l.dc().parent_copy_required(0)) return;
 #endif
     El::LockedView(l.get_error_signals(0), output_grad);
   }
   else {
     for (size_t j=0; j<num_inputs; ++j) {
 #ifdef LBANN_HAS_DISTCONV
-      if (l.distconv_enabled() && !l.dc().keep_original_input(j)) continue;
+      if (l.distconv_enabled() && !l.dc().parent_copy_required(j)) continue;
 #endif
       auto& input_grad = l.get_error_signals(j);
       input_grad.AlignWith(output_grad);

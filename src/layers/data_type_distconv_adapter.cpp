@@ -577,7 +577,7 @@ void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_siz
             mini_batch_size);
   set_original_activations_outermost_dimension(mini_batch_size);
   // TODO: Needs to check other output tensors
-  if (keep_original_output(0) && get_original_activations().is_split_root()) {
+  if (child_copy_required(0) && get_original_activations().is_split_root()) {
     assert_eq((int)get_original_activations().get_local_shape()[-1],
               l.get_activations().LocalWidth());
   }
@@ -616,7 +616,7 @@ void data_type_distconv_adapter<TensorDataType>::bp_setup(El::Int mini_batch_siz
               mini_batch_size);
     // TODO: Check other input tensors
     if (i == 0) {
-      if (keep_original_input(i) && !l.skip_first_layer_bp()
+      if (parent_copy_required(i) && !l.skip_first_layer_bp()
           && get_original_error_signals().is_split_root()) {
         assert_eq((int)get_original_error_signals().get_local_shape()[-1],
                   l.get_error_signals().LocalWidth());

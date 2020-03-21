@@ -624,8 +624,6 @@ int Layer::get_num_spatial_dims() const {
 void Layer::prepare_distconv() {
   if (distconv_enabled()) {
     setup_distconv_adapter();
-    dc().setup_inter_layer_adaptation();
-    dc().setup_keep_original_tensors();
   }
 }
 
