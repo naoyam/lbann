@@ -161,10 +161,6 @@ bool is_mpi_root();
  */
 int get_rank_stride();
 
-/** Query profiling
- */
-bool is_profiling_enabled();
-
 /** Query if the execution is for performance evaluation
  */
 bool evaluate_performance();

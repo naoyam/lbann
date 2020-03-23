@@ -55,7 +55,6 @@ HaloExchangeMethod opt_halo_exchange = HaloExchangeMethod::AL;
 ShuffleMethod opt_tensor_shuffler = ShuffleMethod::AL;
 #endif // DISTCONV_HAS_P2P
 int opt_rank_stride = 1;
-bool opt_enable_profile = false;
 bool opt_evaluate_performance = false;
 std::string opt_convolution_fwd_algorithm("DEFAULT");
 std::string opt_convolution_bwd_data_algorithm("DEFAULT");
@@ -81,9 +80,6 @@ void set_options() {
   env = std::getenv("LBANN_DISTCONV_RANK_STRIDE");
   if (env) {
     opt_rank_stride = std::atoi(env);
-  }
-  if (std::getenv("LBANN_DISTCONV_PROFILE")) {
-    opt_enable_profile = true;
   }
   if (std::getenv("LBANN_DISTCONV_EVALUATE_PERFORMANCE")) {
     opt_evaluate_performance = true;
@@ -130,7 +126,6 @@ void print_options(std::ostream &os) {
     ss << "  halo_exchange:" << opt_halo_exchange << "\n";
     ss << "  tensor_shuffler:" << opt_tensor_shuffler << "\n";
     ss << "  rank_stride:" << opt_rank_stride << "\n";
-    ss << "  enable_profile: " << opt_enable_profile << "\n";
     ss << "  evaluate_performance: "
        << opt_evaluate_performance << "\n";
     ss << "  convolution_fwd_algorithm: "
@@ -348,10 +343,6 @@ bool is_mpi_root() {
 
 int get_rank_stride() {
   return opt_rank_stride;
-}
-
-bool is_profiling_enabled() {
-  return opt_enable_profile;
 }
 
 bool evaluate_performance() {
