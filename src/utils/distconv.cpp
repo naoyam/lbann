@@ -44,7 +44,6 @@ p2p::P2P *p2p_instance = nullptr;
 #endif // DISTCONV_HAS_P2P
 Al::mpicuda_backend::comm_type *mpicuda_comm_instance = nullptr;
 Backend *backend_instance = nullptr;
-std::shared_ptr<El::mpi::Comm> spatial_comm;
 
 bool options_set = false;
 #ifdef DISTCONV_HAS_P2P
@@ -289,12 +288,13 @@ void initialize(MPI_Comm comm) {
 #ifdef DISTCONV_HAS_P2P
   p2p_instance = new p2p::P2P(mpi_comm);
 #endif // DISTCONV_HAS_P2P
-  auto &cudnn_h = lbann::cudnn::get_handle();
-  cudaStream_t s = El::GPUManager::Stream();
-  mpicuda_comm_instance = new Al::mpicuda_backend::comm_type(mpi_comm, s);
+  mpicuda_comm_instance = new Al::mpicuda_backend::comm_type(
+      mpi_comm, El::GPUManager::Stream());
   ::distconv::cudnn::Options backend_opts;
   backend_opts.m_deterministic = opt_deterministic;
-  backend_instance = new Backend(mpi_comm, cudnn_h, s, backend_opts);
+  backend_instance = new Backend(
+      mpi_comm, lbann::cudnn::get_handle(),
+      El::GPUManager::Stream(), backend_opts);
   print_options(std::cout);
   initialized = true;
 }
@@ -314,15 +314,6 @@ void finalize() {
 
 MPI_Comm get_mpi_comm() {
   return mpi_comm;
-}
-
-std::shared_ptr<El::mpi::Comm> get_spatial_el_comm(const LocaleMPI &spatial_loc) {
-  if (spatial_comm) {
-    assert_eq(spatial_loc.get_size(), spatial_comm->Size());
-  } else {
-    spatial_comm = std::make_shared<El::mpi::Comm>(spatial_loc.get_comm());
-  }
-  return spatial_comm;
 }
 
 int get_mpi_rank() {

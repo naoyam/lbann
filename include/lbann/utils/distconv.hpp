@@ -141,10 +141,6 @@ void finalize();
  */
 MPI_Comm get_mpi_comm();
 
-/** Return a cached Elemental communicator for the spatial domain
- */
-std::shared_ptr<El::mpi::Comm> get_spatial_el_comm(const LocaleMPI &spatial_loc);
-
 /** Return the MPI rank
  */
 int get_mpi_rank();
