@@ -47,8 +47,13 @@ Backend *backend_instance = nullptr;
 std::shared_ptr<El::mpi::Comm> spatial_comm;
 
 bool options_set = false;
-std::string opt_halo_exchange = "HYBRID";
-std::string opt_tensor_shuffler = "HYBRID";
+#ifdef DISTCONV_HAS_P2P
+HaloExchangeMethod opt_halo_exchange = HaloExchangeMethod::HYBRID;
+ShuffleMethod opt_tensor_shuffler = ShuffleMethod::HYBRID;
+#else
+HaloExchangeMethod opt_halo_exchange = HaloExchangeMethod::AL;
+ShuffleMethod opt_tensor_shuffler = ShuffleMethod::AL;
+#endif // DISTCONV_HAS_P2P
 int opt_rank_stride = 1;
 bool opt_enable_profile = false;
 bool opt_evaluate_performance = false;
@@ -67,11 +72,11 @@ void set_options() {
   char *env = nullptr;
   env = std::getenv("LBANN_DISTCONV_HALO_EXCHANGE");
   if (env) {
-    opt_halo_exchange = env;
+    opt_halo_exchange = ::distconv::GetHaloExchangeMethod(env);
   }
   env = std::getenv("LBANN_DISTCONV_TENSOR_SHUFFLER");
   if (env) {
-    opt_tensor_shuffler = env;
+    opt_tensor_shuffler = ::distconv::GetShuffleMethod(env);
   }
   env = std::getenv("LBANN_DISTCONV_RANK_STRIDE");
   if (env) {
@@ -394,19 +399,7 @@ Backend &get_backend() {
 }
 
 HaloExchangeMethod get_halo_exchange_method() {
-  if (opt_halo_exchange == "AL") {
-    return HaloExchangeMethod::AL;
-  } else if (opt_halo_exchange == "MPI") {
-    return HaloExchangeMethod::MPI;
-#ifdef DISTCONV_HAS_P2P
-  } else if (opt_halo_exchange == "P2P") {
-    return HaloExchangeMethod::P2P;
-  } else if (opt_halo_exchange == "HYBRID") {
-    return HaloExchangeMethod::HYBRID;
-#endif // DISTCONV_HAS_P2P
-  } else {
-    LBANN_ERROR("Unknown value of option opt_halo_exchange");
-  }
+  return opt_halo_exchange;
 }
 
 template <typename TensorDataType>
@@ -416,14 +409,14 @@ TensorShuffler<TensorDataType> *get_tensor_shuffler(const TensorDev<TensorDataTy
       << "Available memory: " <<
       cuda::get_available_memory_capacity() / 1024.0 / 1024.0
       << " MB";
-  if (opt_tensor_shuffler == "AL") {
+  if (opt_tensor_shuffler == ShuffleMethod::AL) {
     return new TensorShufflerAL<TensorDataType>(src, dst, get_mpicuda());
 #ifdef DISTCONV_HAS_P2P
-  } else if (opt_tensor_shuffler == "HYBRID") {
+  } else if (opt_tensor_shuffler == ShuffleMethod::HYBRID) {
     return new TensorShufflerHybrid<TensorDataType>(src, dst, *p2p_instance, get_mpicuda(),
                                                     get_shuffler_src_buf(src),
                                                     get_shuffler_dst_buf(dst));
-  } else if (opt_tensor_shuffler == "P2P") {
+  } else if (opt_tensor_shuffler == ShuffleMethod::P2P) {
     bool src_feasible = is_p2p_shuffle_feasible(src);
     bool dst_feasible = is_p2p_shuffle_feasible(dst);
     if (!src_feasible) {
