@@ -290,8 +290,7 @@ void initialize(MPI_Comm comm) {
   p2p_instance = new p2p::P2P(mpi_comm);
 #endif // DISTCONV_HAS_P2P
   auto &cudnn_h = lbann::cudnn::get_handle();
-  cudaStream_t s;
-  CHECK_CUDNN(cudnnGetStream(cudnn_h, &s));
+  cudaStream_t s = El::GPUManager::Stream();
   mpicuda_comm_instance = new Al::mpicuda_backend::comm_type(mpi_comm, s);
   ::distconv::cudnn::Options backend_opts;
   backend_opts.m_deterministic = opt_deterministic;
@@ -398,10 +397,6 @@ Al::mpicuda_backend::comm_type &get_mpicuda() {
 
 Backend &get_backend() {
   return *backend_instance;
-}
-
-cudaStream_t get_stream() {
-  return get_backend().get_stream();
 }
 
 HaloExchangeMethod get_halo_exchange_method() {

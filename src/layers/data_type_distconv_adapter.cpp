@@ -314,7 +314,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_prev_activations() {
       m_inputs.emplace_back(make_unique<TensorDevType>(
           shape, loc, dist, local_shape));
       assert0(m_inputs.back()->allocate());
-      m_inputs.back()->zero(dc::get_stream());
+      m_inputs.back()->zero(El::GPUManager::Stream());
     } else {
       // Create a shallow copy
       const auto &parent_activations =
@@ -406,7 +406,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_activations() {
       output_tensor_shape,
       loc, dist, activations_local_shape));
   assert0(m_outputs.back()->allocate());
-  m_outputs.back()->zero(dc::get_stream());
+  m_outputs.back()->zero(El::GPUManager::Stream());
 }
 
 template <typename TensorDataType>
@@ -448,7 +448,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_prev_error_signals() {
       m_gradient_wrt_outputs.emplace_back(make_unique<TensorDevType>(
           shape, loc, dist, local_shape));
       assert0(m_gradient_wrt_outputs.back()->allocate());
-      m_gradient_wrt_outputs.back()->zero(dc::get_stream());
+      m_gradient_wrt_outputs.back()->zero(El::GPUManager::Stream());
     } else {
       // Create a shallow copy
       const auto &child_error_signals =
@@ -509,7 +509,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_error_signals() {
         << get_name() << ": skipping allocation of error signals";
   } else {
     assert0(m_gradient_wrt_inputs.back()->allocate());
-    m_gradient_wrt_inputs.back()->zero(dc::get_stream());
+    m_gradient_wrt_inputs.back()->zero(El::GPUManager::Stream());
   }
   dc::MPIPrintStreamDebug() << get_name() << "; "
                             << "error signals: " << get_error_signals();

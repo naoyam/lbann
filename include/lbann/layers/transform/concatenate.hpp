@@ -128,7 +128,7 @@ private:
     dc::tensor::Concatenate(this->dc().get_activations(0),
                             this->dc().get_prev_activations(0),
                             this->dc().get_prev_activations(1),
-                            dc::get_stream());
+                            El::GPUManager::Stream());
     this->dc().copy_out_activations();
   }
 
@@ -137,7 +137,7 @@ private:
     dc::tensor::Slice(this->dc().get_error_signals(0),
                       this->dc().get_error_signals(1),
                       this->dc().get_prev_error_signals(0),
-                      dc::get_stream());
+                      El::GPUManager::Stream());
     this->dc().copy_out_error_signals();
   }
 #endif // LBANN_HAS_DISTCONV
@@ -389,7 +389,7 @@ setup_error_signals() {
     this->m_gradient_wrt_inputs.emplace_back(
         make_unique<TensorDevType>(shape, loc, dist, local_shape));
     assert0(this->m_gradient_wrt_inputs.back()->allocate());
-    this->m_gradient_wrt_inputs.back()->zero(dc::get_stream());
+    this->m_gradient_wrt_inputs.back()->zero(El::GPUManager::Stream());
   }
 }
 #endif // LBANN_HAS_DISTCONV

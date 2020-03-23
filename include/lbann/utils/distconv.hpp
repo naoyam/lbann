@@ -215,10 +215,6 @@ Al::mpicuda_backend::comm_type &get_mpicuda();
  */
 Backend &get_backend();
 
-/** Get Distconv stream.
- */
-cudaStream_t get_stream();
-
 /** Return a HaloExchangeMethod
  */
 ::distconv::HaloExchangeMethod get_halo_exchange_method();
