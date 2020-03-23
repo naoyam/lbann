@@ -385,12 +385,6 @@ bool is_cosmoflow_parallel_io_enabled() {
   return opt_cosmoflow_parallel_io;
 }
 
-#ifdef DISTCONV_HAS_P2P
-p2p::P2P &get_p2p() {
-  return *p2p_instance;
-}
-#endif // DISTCONV_HAS_P2P
-
 Al::mpicuda_backend::comm_type &get_mpicuda() {
   return *mpicuda_comm_instance;
 }
@@ -426,7 +420,7 @@ TensorShuffler<TensorDataType> *get_tensor_shuffler(const TensorDev<TensorDataTy
     return new TensorShufflerAL<TensorDataType>(src, dst, get_mpicuda());
 #ifdef DISTCONV_HAS_P2P
   } else if (opt_tensor_shuffler == "HYBRID") {
-    return new TensorShufflerHybrid<TensorDataType>(src, dst, get_p2p(), get_mpicuda(),
+    return new TensorShufflerHybrid<TensorDataType>(src, dst, *p2p_instance, get_mpicuda(),
                                                     get_shuffler_src_buf(src),
                                                     get_shuffler_dst_buf(dst));
   } else if (opt_tensor_shuffler == "P2P") {
@@ -442,7 +436,7 @@ TensorShuffler<TensorDataType> *get_tensor_shuffler(const TensorDev<TensorDataTy
     }
     if (src_feasible && dst_feasible) {
       MPIRootPrintStreamInfo() << "Using P2P shuffler";
-      return new TensorShufflerP2P<TensorDataType>(src, dst, get_p2p(),
+      return new TensorShufflerP2P<TensorDataType>(src, dst, *p2p_instance,
                                                    get_shuffler_src_buf(src),
                                                    get_shuffler_dst_buf(dst));
     } else {
