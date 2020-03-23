@@ -597,9 +597,9 @@ private:
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
   /** Retrievs distconv adapter. */
-  virtual const distconv_adapter& dc() const { return *m_dc; }
+  virtual const distconv_adapter& dc() const;
   /** Retrievs distconv adapter. */
-  virtual distconv_adapter& dc() { return *m_dc; }
+  virtual distconv_adapter& dc();
   /** Indicate whether backprop can be safely skipped. */
   bool skip_first_layer_bp() const;
 

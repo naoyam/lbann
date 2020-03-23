@@ -653,6 +653,19 @@ bool Layer::distconv_enabled() const {
   return m_distconv_enabled;
 }
 
+distconv_adapter& Layer::dc() {
+  return const_cast<distconv_adapter&>(
+      static_cast<const Layer&>(*this).dc());
+}
+
+const distconv_adapter& Layer::dc() const {
+  if (m_dc == nullptr) {
+    LBANN_ERROR("Trying to access distconv adapter for layer, ",
+                get_name(), ", without setting up");
+  }
+  return *m_dc;
+}
+
 // TODO: Needs more robust implementation
 bool Layer::skip_first_layer_bp() const {
   if (!distconv_enabled()) return false;
