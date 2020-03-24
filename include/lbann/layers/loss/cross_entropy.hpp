@@ -228,6 +228,8 @@ private:
 #ifdef LBANN_HAS_DISTCONV
   friend class cross_entropy_distconv_adapter<TensorDataType, T_layout, Dev>;
  protected:
+  bool is_distconv_supported() const override { return true; }
+
   void setup_distconv_adapter() override {
     this->get_dc() = make_unique<
       cross_entropy_distconv_adapter<TensorDataType, T_layout, Dev>>(*this);
