@@ -106,7 +106,6 @@ class distconv_adapter {
   virtual void ensure_prev_error_signals() = 0;
   virtual void copy_out_error_signals() = 0;
 
-
   bool parent_copy_required(size_t input_index) const;
   bool parent_shuffle_required(size_t input_index) const;
   bool child_copy_required(size_t output_index) const;
