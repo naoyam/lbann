@@ -211,21 +211,17 @@ void distconv_adapter::setup_tensor_shuffle() {
   }
 }
 
-void distconv_adapter::setup_distributions(tensor_overlap_constraints &constraints) {
-  auto &l = layer();
-  const int num_dims = get_num_dims();
-  auto &ps = l.get_parallel_strategy();
-  dc::MPIRootPrintStreamDebug() << "Parallel Strategy for layer "
-                                << get_name() << ": " << ps;
-  int n = ps.sample_groups;
-  int c = ps.channel_groups;
-  int f = ps.filter_groups;
-  int d = get_num_spatial_dims() == 3 ? ps.depth_groups : 1;
-  int h = ps.height_groups;
-  int w = ps.width_groups;
-  int np = l.m_comm->get_procs_per_trainer();
+void distconv_adapter::adjust_parallel_strategy() {
+  auto &ps = layer().get_parallel_strategy();
+  auto n = ps.sample_groups;
+  auto c = ps.channel_groups;
+  auto f = ps.filter_groups;
+  auto d = get_num_spatial_dims() == 3 ? ps.depth_groups : 1;
+  auto h = ps.height_groups;
+  auto w = ps.width_groups;
+  auto np = layer().m_comm->get_procs_per_trainer();
 
-  const int spatial_prod = d * h * w;
+  const auto spatial_prod = d * h * w;
 
   // if only one process is used, do not parallelize
   if (np == 1) {
@@ -237,10 +233,11 @@ void distconv_adapter::setup_distributions(tensor_overlap_constraints &constrain
   }
   if (c != 1 || f != 1) {
     LBANN_ERROR("Distconv does not support channel/filter parallelization yet. Layer: ",
-                get_name(), ", ps: ", ps);
+                get_name(), ", parallel strategy: ", ps);
   }
   if (n * c * spatial_prod > np) {
-    LBANN_ERROR("The number of MPI ranks must be at least as large as the number of processes implied by parallel strategy: ", ps);
+    LBANN_ERROR("The number of MPI ranks must be at least as large as the number of processes implied by parallel strategy: ",
+                ps);
   }
   // Put the remaining factor into the outer-most process dimension
   float rem = np / (float) (n * c * spatial_prod);
@@ -250,19 +247,9 @@ void distconv_adapter::setup_distributions(tensor_overlap_constraints &constrain
     LBANN_ERROR("Can't determine factorization of the number of MPI ranks for parallel strategy: ",
                 ps);
   }
-  std::string xd_array, xd_array_names;
-  if (num_dims == 5) {
-    xd_array = dc::util::join_xd_array(std::vector<int>({n, c, d, h, w}));
-    xd_array_names = "NxCxDxHxW";
-  } else {
-    assert_eq(num_dims, 4);
-    xd_array = dc::util::join_xd_array(std::vector<int>({n, c, h, w}));
-    xd_array_names = "NxCxHxW";
-  }
-  dc::MPIRootPrintStreamDebug() << "Process grid of " << xd_array_names << ": "
-                                << xd_array;
 
-  assert_always(spatial_prod * n * c == np && spatial_prod * n * f == np);
+  assert_always(spatial_prod * n * c == np);
+  assert_always(spatial_prod * n * f == np);
 
   ps.sample_groups = n;
   ps.channel_groups = c;
@@ -277,17 +264,23 @@ void distconv_adapter::setup_distributions(tensor_overlap_constraints &constrain
   if (ps.depth_splits == 0) ps.depth_splits = d;
   if (ps.height_splits == 0) ps.height_splits = h;
   if (ps.width_splits == 0) ps.width_splits = w;
+}
 
+void distconv_adapter::setup_distributions(tensor_overlap_constraints &constraints) {
+  const auto num_dims = get_num_dims();
   dc::Shape input_locale_shape(num_dims);
   dc::Shape input_split_shape(num_dims);
   dc::Shape output_locale_shape(num_dims);
   dc::Shape output_split_shape(num_dims);
 
-  input_locale_shape[dc::get_sample_dim()] = n;
-  input_locale_shape[dc::get_channel_dim()] = c;
-  input_locale_shape[0] = w;
-  input_locale_shape[1] = h;
-  if (num_dims == 5)  input_locale_shape[2] = d;
+  adjust_parallel_strategy();
+  const auto &ps = layer().get_parallel_strategy();
+
+  input_locale_shape[dc::get_sample_dim()] = ps.sample_groups;
+  input_locale_shape[dc::get_channel_dim()] = ps.channel_groups;
+  input_locale_shape[0] = ps.width_groups;
+  input_locale_shape[1] = ps.height_groups;
+  if (num_dims == 5)  input_locale_shape[2] = ps.depth_groups;
 
   input_split_shape[dc::get_sample_dim()] = ps.sample_splits;
   input_split_shape[dc::get_channel_dim()] = ps.channel_splits;
@@ -295,11 +288,11 @@ void distconv_adapter::setup_distributions(tensor_overlap_constraints &constrain
   input_split_shape[1] = ps.height_splits;
   if (num_dims == 5)  input_split_shape[2] = ps.depth_splits;
 
-  output_locale_shape[dc::get_sample_dim()] = n;
-  output_locale_shape[dc::get_channel_dim()] = f;
-  output_locale_shape[0] = w;
-  output_locale_shape[1] = h;
-  if (num_dims == 5)  output_locale_shape[2] = d;
+  output_locale_shape[dc::get_sample_dim()] = ps.sample_groups;
+  output_locale_shape[dc::get_channel_dim()] = ps.filter_groups;
+  output_locale_shape[0] = ps.width_groups;
+  output_locale_shape[1] = ps.height_groups;
+  if (num_dims == 5)  output_locale_shape[2] = ps.depth_groups;
 
   output_split_shape[dc::get_sample_dim()] = ps.sample_splits;
   output_split_shape[dc::get_channel_dim()] = ps.filter_splits;

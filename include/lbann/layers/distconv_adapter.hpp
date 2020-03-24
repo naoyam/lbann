@@ -58,7 +58,7 @@ class tensor_overlap_constraints {
 
 class distconv_adapter {
   friend class Layer;
-public:
+ public:
   distconv_adapter(Layer& layer);
   virtual ~distconv_adapter() = default;
 
@@ -68,9 +68,9 @@ public:
   virtual const dc::AbsTensor& get_error_signals(const Layer& parent) const = 0;
 
   virtual void setup_distributions(tensor_overlap_constraints &constraints);
-
   void impose_adjacent_overlap_constraints(
       tensor_overlap_constraints &constraints);
+
   dc::Dist &get_prev_activations_dist();
   const dc::Dist &get_prev_activations_dist() const;
   dc::Dist &get_activations_dist();
@@ -138,6 +138,7 @@ public:
   Layer& m_layer;
 
   void setup_tensor_shuffle();
+  void adjust_parallel_strategy();
 };
 
 } // namespace lbann
