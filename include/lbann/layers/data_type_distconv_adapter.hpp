@@ -96,12 +96,6 @@ public:
 
   void set_original_activations_outermost_dimension(size_t dim);
 
-  // TODO: REMOVE THIS. This is a temporary interface until
-  // distconv_adapter refactoring is completed.
-  std::vector<std::unique_ptr<TensorDevType>> &get_outputs() {
-    return m_outputs;
-  }
-
   void fp_setup(El::Int mini_batch_size) override;
   void fp_postprocess() override;
   void bp_setup(El::Int mini_batch_size) override;
