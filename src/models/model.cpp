@@ -1420,8 +1420,8 @@ bool model::save_model() {
 
 #ifdef LBANN_HAS_DISTCONV
 void model::setup_distconv() {
-  setup_tensor_distributions();
-  print_layer_distributions();
+  setup_distributions();
+  print_distributions();
   // Setup fp tensors
   for (El::Int i = 0; i < get_num_layers(); ++i) {
     auto &layer = get_layer(i);
@@ -1443,7 +1443,7 @@ void model::setup_distconv() {
   }
 }
 
-void model::setup_tensor_distributions() {
+void model::setup_distributions() {
   tensor_overlap_constraints constraints;
   // Initialize the distributions and constraints
   for (El::Int i = 0; i < get_num_layers(); ++i) {
@@ -1459,7 +1459,7 @@ void model::setup_tensor_distributions() {
   constraints.find_valid_overlap();
 }
 
-void model::print_layer_distributions() const {
+void model::print_distributions() const {
   std::stringstream ss;
   for (El::Int i = 0; i < get_num_layers(); ++i) {
     const auto& layer = get_layer(i);
