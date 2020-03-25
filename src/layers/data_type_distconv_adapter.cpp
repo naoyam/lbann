@@ -458,63 +458,69 @@ setup_original_activations_i(int index) {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_prev_error_signals() {
-  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
-  const auto shape = get_prev_error_signals_shape();
-  const auto local_shape = get_prev_error_signals_local_shape();
-  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-  const auto &dist = this->get_prev_error_signals_dist();
-
-  for (int i = 0; i < l.get_num_children(); ++i) {
-    if (child_copy_required(i) || child_shuffle_required(i)) {
-      m_gradient_wrt_outputs.emplace_back(make_unique<TensorDevType>(
-          shape, loc, dist, local_shape));
-      assert0(m_gradient_wrt_outputs.back()->allocate());
-      m_gradient_wrt_outputs.back()->zero(El::GPUManager::Stream());
-    } else {
-      // Create a shallow copy
-      const auto &child_error_signals =
-          dynamic_cast<const TensorDevType&>(
-              l.get_child_layers()[i]->dc().get_error_signals(l));
-      // Just sanity check
-      assert_always(child_error_signals.get_distribution() == dist);
-      m_gradient_wrt_outputs.emplace_back(make_unique<TensorDevType>(
-          child_error_signals));
-    }
+  m_gradient_wrt_outputs.clear();
+  for (int i = 0; i < layer().get_num_children(); ++i) {
+    m_gradient_wrt_outputs.emplace_back(setup_prev_error_signals_i(i));
   }
-  dc::MPIPrintStreamDebug() << get_name() << "; "
-                            << "prev error signals: " << get_prev_error_signals();
+}
+
+template <typename TensorDataType>
+TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
+setup_prev_error_signals_i(int index) {
+  TensorDevPtr<TensorDataType> t = nullptr;
+  const auto &dist = this->get_prev_error_signals_dist();
+  if (child_copy_required(index) || child_shuffle_required(index)) {
+    const auto shape = get_prev_error_signals_shape(index);
+    const auto local_shape = get_prev_error_signals_local_shape(index);
+    const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+    t = make_unique<TensorDevType>(shape, loc, dist, local_shape);
+    assert0(t->allocate());
+    t->zero(El::GPUManager::Stream());
+  } else {
+    // Create a shallow copy
+    const auto &child_error_signals =
+        dynamic_cast<const TensorDevType&>(
+            layer().get_child_layers()[index]->dc().get_error_signals(layer()));
+    // Just sanity check
+    assert_always(child_error_signals.get_distribution() == dist);
+    t = make_unique<TensorDevType>(child_error_signals);
+  }
+  return t;
 }
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_original_prev_error_signals() {
-  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
-  const auto shape = get_prev_error_signals_shape();
-  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-  const auto dist = dc::get_hydrogen_data_parallel_distribution(
-      l.get_num_dims());
-  auto local_shape = shape;
-  // Set the sample dimension as 0 so that its actual value is
-  // calculated by Distconv
-  local_shape[-1] = 0;
+ m_original_gradient_wrt_outputs.clear();
+ for (int i = 0; i < layer().get_num_children(); ++i) {
+   m_original_gradient_wrt_outputs.emplace_back(
+       setup_original_prev_error_signals_i(i));
+ }
+}
 
-  m_original_gradient_wrt_outputs.clear();
-  m_original_gradient_wrt_outputs.resize(l.get_num_parents());
-
-  for (int i = 0; i < l.get_num_children(); ++i) {
-    if (this->child_copy_required(i)) {
-      m_original_gradient_wrt_outputs[i] = make_unique<TensorDevType>(
-          shape, loc, dist, local_shape);
-    } else if (this->child_shuffle_required(i)) {
-      // NOTE: previous activations are assumed to be of the same
-      // tensor data type.
-      // Create a shallow copy of the activations of the prev layer
-      const auto &child_error_signals =
-          dynamic_cast<const TensorDevType&>(
-              l.get_child_layers()[i]->dc().get_error_signals(l));
-      m_original_gradient_wrt_outputs[i] = make_unique<TensorDevType>(
-          child_error_signals);
-    }
+template <typename TensorDataType>
+TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
+setup_original_prev_error_signals_i(int index) {
+  TensorDevPtr<TensorDataType> t = nullptr;
+  if (this->child_copy_required(index)) {
+    const auto shape = get_prev_error_signals_shape(index);
+    const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+    const auto dist = dc::get_hydrogen_data_parallel_distribution(
+        layer().get_num_dims());
+    auto local_shape = shape;
+    // Set the sample dimension as 0 so that its actual value is
+    // calculated by Distconv
+    local_shape[-1] = 0;
+    t = make_unique<TensorDevType>(shape, loc, dist, local_shape);
+  } else if (this->child_shuffle_required(index)) {
+    // NOTE: previous activations are assumed to be of the same
+    // tensor data type.
+    // Create a shallow copy of the activations of the prev layer
+    const auto &child_error_signals =
+        dynamic_cast<const TensorDevType&>(
+            layer().get_child_layers()[index]->dc().get_error_signals(layer()));
+    t = make_unique<TensorDevType>(child_error_signals);
   }
+  return t;
 }
 
 template <typename TensorDataType>
@@ -545,18 +551,29 @@ setup_error_signals_i(int index) {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_original_error_signals() {
-  const auto shape = get_error_signals_shape();
-  const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-  const auto dist = dc::get_hydrogen_data_parallel_distribution(
-      get_num_dims());
-  auto local_shape = shape;
-  // Set the sample dimension as 0 so that its actual value is
-  // calculated by Distconv
-  local_shape[-1] = 0;
+  m_original_gradient_wrt_inputs.clear();
+  for (int i = 0; i < layer().get_num_parents(); ++i) {
+    m_original_gradient_wrt_inputs.emplace_back(
+        setup_original_error_signals_i(i));
+  }
+}
 
-  // TODO: Only the first error signal tensor is handled
-  m_original_gradient_wrt_inputs.emplace_back(make_unique<TensorDevType>(
-      shape, loc, dist, local_shape));
+template <typename TensorDataType>
+TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
+setup_original_error_signals_i(int index) {
+  TensorDevPtr<TensorDataType> t = nullptr;
+  if (parent_copy_required(index)) {
+    const auto shape = get_error_signals_shape(index);
+    const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
+    const auto dist = dc::get_hydrogen_data_parallel_distribution(
+        get_num_dims());
+    auto local_shape = shape;
+    // Set the sample dimension as 0 so that its actual value is
+    // calculated by Distconv
+    local_shape[-1] = 0;
+    t = make_unique<TensorDevType>(shape, loc, dist, local_shape);
+  }
+  return t;
 }
 
 template <typename TensorDataType>

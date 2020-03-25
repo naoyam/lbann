@@ -121,11 +121,13 @@ public:
 
   // Setup bp tensors
   void setup_prev_error_signals() override;
+  virtual std::unique_ptr<TensorDevType> setup_prev_error_signals_i(int index);
   void setup_original_prev_error_signals() override;
+  virtual std::unique_ptr<TensorDevType> setup_original_prev_error_signals_i(int index);
   void setup_error_signals() override;
   virtual std::unique_ptr<TensorDevType> setup_error_signals_i(int index);
   void setup_original_error_signals() override;
-  //virtual std::unique_ptr<TensorDevType> setup_original_error_signals_i(int index);
+  virtual std::unique_ptr<TensorDevType> setup_original_error_signals_i(int index);
 
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_original_inputs;
