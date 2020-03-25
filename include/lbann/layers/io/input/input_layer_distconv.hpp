@@ -151,7 +151,11 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
       setup_shuffler_buffers(m_input_host_view, m_input_host_tensor);
     }
 
-    this->setup_activations();
+    // Only setup the first activations as the label tensor may be set
+    // up in its own function.
+    this->m_outputs.clear();
+    this->m_outputs.resize(this->layer().get_num_children());
+    this->setup_activations_i(0);
 
     // Keeps the same input type and convert to float on GPU
     m_input_dev = TensorDevInput(tensor_shape, loc, output_dist);

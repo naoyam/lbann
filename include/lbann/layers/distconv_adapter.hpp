@@ -80,18 +80,7 @@ class distconv_adapter {
   dc::Dist &get_error_signals_dist();
   const dc::Dist &get_error_signals_dist() const;
 
-  // Setup fp tensors
-  virtual void setup_prev_activations() = 0;
-  virtual void setup_original_prev_activations() = 0;
-  virtual void setup_activations() = 0;
-  virtual void setup_original_activations() = 0;
   virtual void setup_fp_tensors();
-
-  // Setup bp tensors
-  virtual void setup_prev_error_signals() = 0;
-  virtual void setup_original_prev_error_signals() = 0;
-  virtual void setup_error_signals() = 0;
-  virtual void setup_original_error_signals() = 0;
   virtual void setup_bp_tensors();
 
   virtual void setup_layer(size_t workspace_capacity) {}
@@ -122,6 +111,17 @@ class distconv_adapter {
   std::string get_name() const;
   int get_num_dims() const;
   int get_num_spatial_dims() const;
+
+  virtual void setup_prev_activations() = 0;
+  virtual void setup_original_prev_activations() = 0;
+  virtual void setup_activations() = 0;
+  virtual void setup_activations_i(int index) = 0;
+  virtual void setup_original_activations() = 0;
+
+  virtual void setup_prev_error_signals() = 0;
+  virtual void setup_original_prev_error_signals() = 0;
+  virtual void setup_error_signals() = 0;
+  virtual void setup_original_error_signals() = 0;
 
   std::vector<dc::Dist> m_prev_activations_dists;
   std::vector<dc::Dist> m_activations_dists;

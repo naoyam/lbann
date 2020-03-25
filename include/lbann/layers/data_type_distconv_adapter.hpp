@@ -82,18 +82,6 @@ public:
   /** Get original previous error signal tensor. */
   TensorDevType& get_original_prev_error_signals(int child_index = 0);
 
-  // Setup fp tensors
-  void setup_prev_activations() override;
-  void setup_original_prev_activations() override;
-  void setup_activations() override;
-  void setup_original_activations() override;
-
-  // Setup bp tensors
-  void setup_prev_error_signals() override;
-  void setup_original_prev_error_signals() override;
-  void setup_error_signals() override;
-  void setup_original_error_signals() override;
-
   void set_original_activations_outermost_dimension(size_t dim);
 
   void fp_setup(El::Int mini_batch_size) override;
@@ -121,6 +109,19 @@ public:
   void dump_original_error_signals() override;
 
  protected:
+  // Setup fp tensors
+  void setup_prev_activations() override;
+  void setup_original_prev_activations() override;
+  void setup_activations() override;
+  void setup_activations_i(int index) override;
+  void setup_original_activations() override;
+
+  // Setup bp tensors
+  void setup_prev_error_signals() override;
+  void setup_original_prev_error_signals() override;
+  void setup_error_signals() override;
+  void setup_original_error_signals() override;
+
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_original_inputs;
   std::vector<std::unique_ptr<TensorDevType>> m_outputs;

@@ -397,16 +397,24 @@ dc::Shape data_type_distconv_adapter<TensorDataType>::get_error_signals_local_sh
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_activations() {
+  m_outputs.clear();
+  m_outputs.resize(layer().get_num_children());
+  for (int i = 0; i < layer().get_num_children(); ++i) {
+    setup_activations_i(i);
+  }
+}
+
+template <typename TensorDataType>
+void data_type_distconv_adapter<TensorDataType>::setup_activations_i(int index) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
-  const dc::Shape output_tensor_shape = get_activations_shape();
   const auto &dist = this->get_activations_dist();
+  const auto output_tensor_shape = get_activations_shape(index);
   const auto activations_local_shape =
-      get_activations_local_shape();
-  m_outputs.emplace_back(make_unique<TensorDevType>(
-      output_tensor_shape,
-      loc, dist, activations_local_shape));
-  assert0(m_outputs.back()->allocate());
-  m_outputs.back()->zero(El::GPUManager::Stream());
+      get_activations_local_shape(index);
+  m_outputs.at(index) = make_unique<TensorDevType>(
+      output_tensor_shape, loc, dist, activations_local_shape);
+  assert0(get_activations(index).allocate());
+  get_activations(index).zero(El::GPUManager::Stream());
 }
 
 template <typename TensorDataType>
@@ -701,7 +709,7 @@ void data_type_distconv_adapter<TensorDataType>::ensure_prev_activations() {
       continue;
     }
     if (i != 0) {
-      LBANN_ERROR("Distconv assumes non-first tensors are available as distconv tensors");
+      LBANN_ERROR(layer().get_name(), ": copyin of non-first tensor not supported");
     }
     if (parent_copy_required(i)) {
       dc::MPIPrintStreamDebug()
@@ -725,9 +733,9 @@ void data_type_distconv_adapter<TensorDataType>::copy_out_activations() {
   auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   for (int i = 0; i < l.get_num_children(); ++i) {
     if (!child_copy_required(i)) continue;
-
-    if (i != 0) LBANN_ERROR("Copyout of non-first tensor not supported");
-
+    if (i != 0) {
+      LBANN_ERROR(layer().get_name(), ": Copyout of non-first tensor not supported");
+    }
     dc::MPIPrintStreamDebug()
         << "Copying activations back to sample decomposition";
     assert0(dc::tensor::View(
@@ -750,7 +758,7 @@ void data_type_distconv_adapter<TensorDataType>::ensure_prev_error_signals() {
       continue;
     }
     if (i != 0) {
-      LBANN_ERROR("Distconv assumes non-first tensors are available as distconv tensors");
+      LBANN_ERROR(layer().get_name(), ": copyin of non-first tensor not supported");
     }
     if (child_copy_required(i)) {
       dc::MPIPrintStreamDebug()
@@ -782,9 +790,9 @@ void data_type_distconv_adapter<TensorDataType>::copy_out_error_signals() {
 
   for (int i = 0; i < l.get_num_parents(); ++i) {
     if (!parent_copy_required(i)) continue;
-
-    if (i != 0) LBANN_ERROR("Copyout of non-first tensor not supported");
-
+    if (i != 0) {
+      LBANN_ERROR(layer().get_name(), ": Copyout of non-first tensor not supported");
+    }
     dc::MPIPrintStreamDebug()
         << "Copying error signals back to sample decomposition";
     assert0(dc::tensor::View(
