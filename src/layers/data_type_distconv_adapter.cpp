@@ -408,11 +408,10 @@ template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_activations_i(int index) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_activations_dist();
-  const auto output_tensor_shape = get_activations_shape(index);
-  const auto activations_local_shape =
-      get_activations_local_shape(index);
+  const auto shape = get_activations_shape(index);
+  const auto local_shape = get_activations_local_shape(index);
   m_outputs.at(index) = make_unique<TensorDevType>(
-      output_tensor_shape, loc, dist, activations_local_shape);
+      shape, loc, dist, local_shape);
   assert0(get_activations(index).allocate());
   get_activations(index).zero(El::GPUManager::Stream());
 }
@@ -506,21 +505,28 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_prev_error_signa
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_error_signals() {
-  const auto shape = get_error_signals_shape();
-  const auto local_shape = get_error_signals_local_shape();
+  m_gradient_wrt_inputs.clear();
+  for (int i = 0; i < layer().get_num_parents(); ++i) {
+    m_gradient_wrt_inputs.emplace_back(setup_error_signals_i(i));
+  }
+}
+
+template <typename TensorDataType>
+std::unique_ptr<typename data_type_distconv_adapter<TensorDataType>::TensorDevType>
+data_type_distconv_adapter<TensorDataType>::setup_error_signals_i(int index) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_error_signals_dist();
-  m_gradient_wrt_inputs.emplace_back(make_unique<TensorDevType>(
-      shape, loc, dist, local_shape));
+  const auto shape = get_error_signals_shape(index);
+  const auto local_shape = get_error_signals_local_shape(index);
+  auto t = make_unique<TensorDevType>(shape, loc, dist, local_shape);
   if (layer().skip_first_layer_bp()) {
     dc::MPIPrintStreamDebug()
         << get_name() << ": skipping allocation of error signals";
   } else {
-    assert0(m_gradient_wrt_inputs.back()->allocate());
-    m_gradient_wrt_inputs.back()->zero(El::GPUManager::Stream());
+    assert0(t->allocate());
+    t->zero(El::GPUManager::Stream());
   }
-  dc::MPIPrintStreamDebug() << get_name() << "; "
-                            << "error signals: " << get_error_signals();
+  return t;
 }
 
 template <typename TensorDataType>

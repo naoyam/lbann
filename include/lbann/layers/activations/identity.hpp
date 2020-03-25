@@ -42,7 +42,7 @@ class identity_distconv_adapter: public data_type_distconv_adapter<TensorDataTyp
   virtual ~identity_distconv_adapter() = default;
   void setup_distributions(tensor_overlap_constraints &constraints) override;
   void setup_activations_i(int index) override;
-  void setup_error_signals() override;
+  std::unique_ptr<TensorDevType> setup_error_signals_i(int index) override;
 };
 #endif // LBANN_HAS_DISTCONV
 

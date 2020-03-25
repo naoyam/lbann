@@ -259,9 +259,9 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
     m_labels_input_type.zero(El::GPUManager::Stream());
 
     // The final label tensor
-    this->m_outputs.emplace_back(
-        make_unique<TensorDevType>(tensor_shape, loc, label_dist));
-    auto &label_tensor = *(this->m_outputs.back());
+    this->m_outputs.at(1) =
+        make_unique<TensorDevType>(tensor_shape, loc, label_dist);
+    auto &label_tensor = this->get_activations(1);
     assert0(label_tensor.allocate());
     label_tensor.zero(El::GPUManager::Stream());
 
@@ -271,7 +271,7 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
   // No bp tensors needed for this layer.
   void setup_prev_error_signals(const dc::Dist& dist) {}
   void setup_original_prev_error_signals() {}
-  void setup_error_signals(const dc::Dist& dist) {}
+  void setup_error_signals() override {}
   void setup_original_error_signals() {}
   void setup_bp_tensors() override {}
 

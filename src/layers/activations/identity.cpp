@@ -57,11 +57,12 @@ setup_activations_i(int index) {
 }
 
 template <typename TensorDataType, data_layout Layout, El::Device Device>
-void identity_distconv_adapter<TensorDataType, Layout, Device>::
-setup_error_signals() {
-  const auto &prev_error_signals = this->get_prev_error_signals();
-  this->m_gradient_wrt_inputs.emplace_back(make_unique<TensorDevType>(
-      prev_error_signals));
+std::unique_ptr<typename identity_distconv_adapter<TensorDataType, Layout, Device>::TensorDevType>
+identity_distconv_adapter<TensorDataType, Layout, Device>::
+setup_error_signals_i(int index) {
+  assert_eq(index, 0);
+  const auto &prev_error_signals = this->get_prev_error_signals(0);
+  return make_unique<TensorDevType>(prev_error_signals);
 }
 #endif // LBANN_HAS_DISTCONV
 

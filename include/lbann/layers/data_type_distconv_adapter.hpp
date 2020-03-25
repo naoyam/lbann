@@ -120,6 +120,7 @@ public:
   void setup_prev_error_signals() override;
   void setup_original_prev_error_signals() override;
   void setup_error_signals() override;
+  virtual std::unique_ptr<TensorDevType> setup_error_signals_i(int index);
   void setup_original_error_signals() override;
 
   std::vector<std::unique_ptr<TensorDevType>> m_inputs;
