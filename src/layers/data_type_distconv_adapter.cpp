@@ -283,7 +283,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_prev_activations
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_original_prev_activations_i(int index) {
+setup_original_prev_activations_i(int index) const {
   TensorDevPtr<TensorDataType> t = nullptr;
   if (parent_copy_required(index)) {
     const auto shape = get_prev_activations_shape();
@@ -317,7 +317,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_prev_activations() {
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_prev_activations_i(int index) {
+setup_prev_activations_i(int index) const {
   const auto &dist = this->get_prev_activations_dist();
   TensorDevPtr<TensorDataType> t = nullptr;
   if (parent_copy_required(index) || parent_shuffle_required(index)) {
@@ -414,7 +414,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_activations() {
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_activations_i(int index) {
+setup_activations_i(int index) const {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_activations_dist();
   const auto shape = get_activations_shape(index);
@@ -435,7 +435,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_activations() {
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_original_activations_i(int index) {
+setup_original_activations_i(int index) const {
   // Create a original tensor only when copyout is needed. Note that
   // when the next layer is a distconv layer and has a different
   // distribution, tensor shuffling is necessary but is done at the
@@ -466,7 +466,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_prev_error_signals() {
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_prev_error_signals_i(int index) {
+setup_prev_error_signals_i(int index) const {
   TensorDevPtr<TensorDataType> t = nullptr;
   const auto &dist = this->get_prev_error_signals_dist();
   if (child_copy_required(index) || child_shuffle_required(index)) {
@@ -499,7 +499,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_prev_error_signa
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_original_prev_error_signals_i(int index) {
+setup_original_prev_error_signals_i(int index) const {
   TensorDevPtr<TensorDataType> t = nullptr;
   if (this->child_copy_required(index)) {
     const auto shape = get_prev_error_signals_shape(index);
@@ -533,7 +533,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_error_signals() {
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_error_signals_i(int index) {
+setup_error_signals_i(int index) const {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_error_signals_dist();
   const auto shape = get_error_signals_shape(index);
@@ -560,7 +560,7 @@ void data_type_distconv_adapter<TensorDataType>::setup_original_error_signals() 
 
 template <typename TensorDataType>
 TensorDevPtr<TensorDataType> data_type_distconv_adapter<TensorDataType>::
-setup_original_error_signals_i(int index) {
+setup_original_error_signals_i(int index) const {
   TensorDevPtr<TensorDataType> t = nullptr;
   if (parent_copy_required(index)) {
     const auto shape = get_error_signals_shape(index);
@@ -578,7 +578,22 @@ setup_original_error_signals_i(int index) {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::
-set_original_activations_outermost_dimension(size_t dim) {
+set_activations_outermost_dimension(size_t dim) {
+  for (auto &t: m_inputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+  for (auto &t: m_original_inputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+  for (auto &t: m_outputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
   for (auto &t: m_original_outputs) {
     if (t == nullptr) continue;
     t->set_outermost_dimension(dim);
@@ -587,24 +602,43 @@ set_original_activations_outermost_dimension(size_t dim) {
 }
 
 template <typename TensorDataType>
+void data_type_distconv_adapter<TensorDataType>::
+set_error_signals_outermost_dimension(size_t dim) {
+  for (auto &t: m_gradient_wrt_outputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+  for (auto &t: m_original_gradient_wrt_outputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+  for (auto &t: m_gradient_wrt_inputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+  for (auto &t: m_original_gradient_wrt_inputs) {
+    if (t == nullptr) continue;
+    t->set_outermost_dimension(dim);
+    assert_eq(t->get_shape()[-1], dim);
+  }
+}
+
+template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_size) {
-  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  const auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   // Reconfigure the sample dimension as the mini batch size may vary
   // at the end of epoch
-  get_prev_activations().set_outermost_dimension(mini_batch_size);
-  assert_eq((int)get_prev_activations().get_shape()[-1],
-            mini_batch_size);
+  set_activations_outermost_dimension(mini_batch_size);
   for (int i = 0; i < l.get_num_parents(); ++i) {
     if (parent_copy_required(i) || parent_shuffle_required(i)) {
       if (i != 0) {
         LBANN_ERROR("Copyin non-first tensor not supported");
       }
-      get_original_prev_activations().set_outermost_dimension(
-          mini_batch_size);
-      assert_eq((int)get_original_prev_activations().get_shape()[-1],
-                mini_batch_size);
       if (parent_copy_required(i)) {
-        // then, parent is assumed to be data parallel, so the local
+        // Parent is assumed to be data parallel, so the local
         // size of the sample dimension should be equal to
         // the local width of previous activations. The check only
         // matters for split root processes as the rest just hold
@@ -617,10 +651,6 @@ void data_type_distconv_adapter<TensorDataType>::fp_setup(El::Int mini_batch_siz
       }
     }
   }
-  get_activations().set_outermost_dimension(mini_batch_size);
-  assert_eq((int)get_activations().get_shape()[-1],
-            mini_batch_size);
-  set_original_activations_outermost_dimension(mini_batch_size);
   // TODO: Needs to check other output tensors
   if (child_copy_required(0) && get_original_activations().is_split_root()) {
     assert_eq((int)get_original_activations().get_local_shape()[-1],
@@ -636,34 +666,22 @@ void data_type_distconv_adapter<TensorDataType>::fp_postprocess() {
 
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::bp_setup(El::Int mini_batch_size) {
-  auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
+  const auto &l = dynamic_cast<data_type_layer<TensorDataType>&>(layer());
   // Reconfigure the sample dimension as the mini batch size may vary
   // at the end of epoch
+  set_error_signals_outermost_dimension(mini_batch_size);
   for (int i = 0; i < l.get_num_children(); ++i) {
-    get_prev_error_signals(i).set_outermost_dimension(mini_batch_size);
-    assert_always((int)get_prev_error_signals(i).get_shape()[-1] ==
-                  mini_batch_size);
     if (child_copy_required(i) || child_shuffle_required(i)) {
       auto &original_input = get_original_prev_error_signals(i);
       if (i != 0) {
         LBANN_ERROR("Copyout non-first tensor not supported");
       }
-      original_input.set_outermost_dimension(mini_batch_size);
-      assert_eq((int)original_input.get_shape()[-1],
-                mini_batch_size);
-      if (child_copy_required(i) &&
-          original_input.is_split_root()) {
+      if (child_copy_required(i) && original_input.is_split_root()) {
         assert_eq(
             (int)original_input.get_local_shape()[-1],
             l.get_prev_error_signals().LocalWidth());
       }
     }
-    get_error_signals().set_outermost_dimension(mini_batch_size);
-    assert_eq((int)get_error_signals().get_shape()[-1],
-              mini_batch_size);
-    get_original_error_signals().set_outermost_dimension(mini_batch_size);
-    assert_eq((int)get_original_error_signals().get_shape()[-1],
-              mini_batch_size);
     // TODO: Check other input tensors
     if (i == 0) {
       if (parent_copy_required(i) && !l.skip_first_layer_bp()

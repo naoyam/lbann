@@ -90,15 +90,10 @@ class distconv_adapter {
   virtual void bp_setup(El::Int mini_batch_size) = 0;
   virtual void bp_postprocess() = 0;
 
-  virtual void ensure_prev_activations() = 0;
-  virtual void copy_out_activations() = 0;
-  virtual void ensure_prev_error_signals() = 0;
-  virtual void copy_out_error_signals() = 0;
-
-  bool parent_copy_required(size_t input_index) const;
-  bool parent_shuffle_required(size_t input_index) const;
-  bool child_copy_required(size_t output_index) const;
-  bool child_shuffle_required(size_t output_index) const;
+  virtual bool parent_copy_required(size_t input_index) const;
+  virtual bool parent_shuffle_required(size_t input_index) const;
+  virtual bool child_copy_required(size_t output_index) const;
+  virtual bool child_shuffle_required(size_t output_index) const;
 
   virtual void dump_activations() const = 0;
   virtual void dump_original_activations()= 0;
@@ -122,18 +117,22 @@ class distconv_adapter {
   virtual void setup_error_signals() = 0;
   virtual void setup_original_error_signals() = 0;
 
+  virtual void ensure_prev_activations() = 0;
+  virtual void copy_out_activations() = 0;
+  virtual void ensure_prev_error_signals() = 0;
+  virtual void copy_out_error_signals() = 0;
+
   std::vector<dc::Dist> m_prev_activations_dists;
   std::vector<dc::Dist> m_activations_dists;
   std::vector<dc::Dist> m_prev_error_signals_dists;
   std::vector<dc::Dist> m_error_signals_dists;
 
+ private:
+  Layer& m_layer;
   std::vector<bool> m_parent_copy_required;
   std::vector<bool> m_parent_shuffle_required;
   std::vector<bool> m_child_copy_required;
   std::vector<bool> m_child_shuffle_required;
-
- private:
-  Layer& m_layer;
 
   void setup_tensor_shuffle();
   void adjust_parallel_strategy();
