@@ -52,11 +52,11 @@ class split_distconv_adapter: public data_type_distconv_adapter<TensorDataType> 
     return data_type_distconv_adapter<TensorDataType>::get_activations_local_shape(0);
   }
 
-  void setup_activations_i(int index) override {
+  std::unique_ptr<TensorDevType> setup_activations_i(int index) override {
     const auto &parent_activations =
         dynamic_cast<const TensorDevType&>(
             this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
-    this->m_outputs.at(index) = make_unique<TensorDevType>(parent_activations);
+    return make_unique<TensorDevType>(parent_activations);
   }
 };
 #endif // LBANN_HAS_DISTCONV

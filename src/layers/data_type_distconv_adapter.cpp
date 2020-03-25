@@ -398,22 +398,23 @@ dc::Shape data_type_distconv_adapter<TensorDataType>::get_error_signals_local_sh
 template <typename TensorDataType>
 void data_type_distconv_adapter<TensorDataType>::setup_activations() {
   m_outputs.clear();
-  m_outputs.resize(layer().get_num_children());
   for (int i = 0; i < layer().get_num_children(); ++i) {
-    setup_activations_i(i);
+    m_outputs.emplace_back(setup_activations_i(i));
   }
 }
 
 template <typename TensorDataType>
-void data_type_distconv_adapter<TensorDataType>::setup_activations_i(int index) {
+std::unique_ptr<typename data_type_distconv_adapter<TensorDataType>::TensorDevType>
+data_type_distconv_adapter<TensorDataType>::
+setup_activations_i(int index) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_activations_dist();
   const auto shape = get_activations_shape(index);
   const auto local_shape = get_activations_local_shape(index);
-  m_outputs.at(index) = make_unique<TensorDevType>(
-      shape, loc, dist, local_shape);
-  assert0(get_activations(index).allocate());
-  get_activations(index).zero(El::GPUManager::Stream());
+  auto t = make_unique<TensorDevType>(shape, loc, dist, local_shape);
+  assert0(t->allocate());
+  t->zero(El::GPUManager::Stream());
+  return t;
 }
 
 template <typename TensorDataType>
@@ -513,7 +514,8 @@ void data_type_distconv_adapter<TensorDataType>::setup_error_signals() {
 
 template <typename TensorDataType>
 std::unique_ptr<typename data_type_distconv_adapter<TensorDataType>::TensorDevType>
-data_type_distconv_adapter<TensorDataType>::setup_error_signals_i(int index) {
+data_type_distconv_adapter<TensorDataType>::
+setup_error_signals_i(int index) {
   const dc::LocaleMPI loc(dc::get_mpi_comm(), false);
   const auto &dist = this->get_error_signals_dist();
   const auto shape = get_error_signals_shape(index);

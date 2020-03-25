@@ -113,7 +113,7 @@ public:
   void setup_prev_activations() override;
   void setup_original_prev_activations() override;
   void setup_activations() override;
-  void setup_activations_i(int index) override;
+  virtual std::unique_ptr<TensorDevType> setup_activations_i(int index);
   void setup_original_activations() override;
 
   // Setup bp tensors

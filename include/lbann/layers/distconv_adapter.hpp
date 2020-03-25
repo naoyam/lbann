@@ -115,7 +115,6 @@ class distconv_adapter {
   virtual void setup_prev_activations() = 0;
   virtual void setup_original_prev_activations() = 0;
   virtual void setup_activations() = 0;
-  virtual void setup_activations_i(int index) = 0;
   virtual void setup_original_activations() = 0;
 
   virtual void setup_prev_error_signals() = 0;

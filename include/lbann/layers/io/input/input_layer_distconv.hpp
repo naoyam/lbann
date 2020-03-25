@@ -154,8 +154,7 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
     // Only setup the first activations as the label tensor may be set
     // up in its own function.
     this->m_outputs.clear();
-    this->m_outputs.resize(this->layer().get_num_children());
-    this->setup_activations_i(0);
+    this->m_outputs.emplace_back(this->setup_activations_i(0));
 
     // Keeps the same input type and convert to float on GPU
     m_input_dev = TensorDevInput(tensor_shape, loc, output_dist);
@@ -259,8 +258,8 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
     m_labels_input_type.zero(El::GPUManager::Stream());
 
     // The final label tensor
-    this->m_outputs.at(1) =
-        make_unique<TensorDevType>(tensor_shape, loc, label_dist);
+    this->m_outputs.emplace_back(
+        make_unique<TensorDevType>(tensor_shape, loc, label_dist));
     auto &label_tensor = this->get_activations(1);
     assert0(label_tensor.allocate());
     label_tensor.zero(El::GPUManager::Stream());
