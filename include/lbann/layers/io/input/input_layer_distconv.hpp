@@ -268,10 +268,10 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
   }
 
   // No bp tensors needed for this layer.
-  void setup_prev_error_signals(const dc::Dist& dist) {}
-  void setup_original_prev_error_signals() {}
+  void setup_prev_error_signals() override {}
+  void setup_original_prev_error_signals() override {}
   void setup_error_signals() override {}
-  void setup_original_error_signals() {}
+  void setup_original_error_signals() override {}
   void setup_bp_tensors() override {}
 
   void copy_out_activations() {
