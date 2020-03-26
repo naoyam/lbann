@@ -350,9 +350,9 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
  protected:
   bool is_distconv_supported() const override { return true; }
 
-  bool keep_original_activations(int index) const override {
+  bool keep_original_outputs(int index) const override {
     if (index == 0) {
-      return data_type_layer<TensorDataType>::keep_original_activations(index);
+      return data_type_layer<TensorDataType>::keep_original_outputs(index);
     } else {
       assert_eq(index, 1);
       if (this->distconv_enabled() &&
