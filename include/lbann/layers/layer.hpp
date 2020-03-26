@@ -596,6 +596,8 @@ private:
   int get_num_spatial_dims() const;
   /** Indicate whether distconv is enabled. */
   bool distconv_enabled() const;
+  /** Indicate whether distconv is enabled. */
+  virtual bool keep_original_activations(int index) const;
   /** Retrievs distconv adapter. */
   virtual const distconv_adapter& dc() const;
   /** Retrievs distconv adapter. */

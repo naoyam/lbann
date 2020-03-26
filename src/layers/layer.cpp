@@ -653,6 +653,10 @@ bool Layer::distconv_enabled() const {
   return m_distconv_enabled;
 }
 
+bool Layer::keep_original_activations(int index) const {
+  return !(distconv_enabled() && !dc().child_copy_required(index));
+}
+
 distconv_adapter& Layer::dc() {
   return const_cast<distconv_adapter&>(
       static_cast<const Layer&>(*this).dc());

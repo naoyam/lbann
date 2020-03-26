@@ -169,7 +169,7 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
     this->setup_activations();
   }
 
-  std::unique_ptr<TensorDevType> setup_activations_i(int index) override {
+  std::unique_ptr<TensorDevType> setup_activations_i(int index) const override {
     if (index == 0) {
       return data_type_distconv_adapter<TensorDataType>::
           setup_activations_i(index);
@@ -200,7 +200,8 @@ class input_adapter: public data_type_distconv_adapter<TensorDataType> {
 
   dc::Shape get_activations_shape(int index) const {
     if (index == 0) {
-      return this->get_activations_shape(index);
+      return data_type_distconv_adapter<TensorDataType>::
+          get_activations_shape(index);
     } else {
       assert_eq(index, 1);
       // TODO: This is a temporary hack. The label tensor shape should
@@ -348,6 +349,20 @@ class input_layer_distconv : public input_layer<TensorDataType, T_io_buffer, T_l
   friend class input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>;
  protected:
   bool is_distconv_supported() const override { return true; }
+
+  bool keep_original_activations(int index) const override {
+    if (index == 0) {
+      return data_type_layer<TensorDataType>::keep_original_activations(index);
+    } else {
+      assert_eq(index, 1);
+      if (this->distconv_enabled() &&
+          dc().m_copy_labels && !dc().child_copy_required(index)) {
+        return false;
+      } else {
+        return true;
+      }
+    }
+  }
 
   input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>& dc() override;
   const input_adapter<TensorDataType, T_io_buffer, T_layout, Dev, InputType>& dc() const override;

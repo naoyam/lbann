@@ -50,7 +50,7 @@ setup_distributions(tensor_overlap_constraints &constraints) {
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 std::unique_ptr<typename identity_distconv_adapter<TensorDataType, Layout, Device>::TensorDevType>
 identity_distconv_adapter<TensorDataType, Layout, Device>::
-setup_activations_i(int index) {
+setup_activations_i(int index) const {
   assert_eq(index, 0);
   const auto &prev_activations = this->get_prev_activations(0);
   return make_unique<TensorDevType>(prev_activations);
@@ -59,7 +59,7 @@ setup_activations_i(int index) {
 template <typename TensorDataType, data_layout Layout, El::Device Device>
 std::unique_ptr<typename identity_distconv_adapter<TensorDataType, Layout, Device>::TensorDevType>
 identity_distconv_adapter<TensorDataType, Layout, Device>::
-setup_error_signals_i(int index) {
+setup_error_signals_i(int index) const {
   assert_eq(index, 0);
   const auto &prev_error_signals = this->get_prev_error_signals(0);
   return make_unique<TensorDevType>(prev_error_signals);

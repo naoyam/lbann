@@ -591,7 +591,7 @@ void data_type_layer<TensorDataType>::fp_setup_outputs(El::Int mini_batch_size) 
   // Initialize output tensors
   for (int i = 0; i < get_num_children(); ++i) {
 #ifdef LBANN_HAS_DISTCONV
-    if (distconv_enabled() && !dc().child_copy_required(i)) continue;
+    if (!keep_original_activations(i)) continue;
 #endif // LBANN_HAS_DISTCONV
     auto& output = get_activations(i);
     output.Empty(false);
