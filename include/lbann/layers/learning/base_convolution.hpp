@@ -57,6 +57,9 @@ class base_convolution_adapter: public data_type_distconv_adapter<TensorDataType
   void setup_bp_tensors() override;
   void setup_layer(size_t workspace_capacity) override;
 
+  void apply_convolution();
+  void apply_bias();
+
   std::unique_ptr<dc::Convolution<TensorDataType>> m_conv;
   std::unique_ptr<TensorDevType> m_kernel;
   std::unique_ptr<TensorDevType> m_bias;
@@ -1285,23 +1288,6 @@ private:
   base_convolution_adapter<TensorDataType, Device>& dc() override;
   const base_convolution_adapter<TensorDataType, Device>& dc() const override;
 
-  void distconv_forward() {
-    assert0(dc::tensor::View(
-        *(this->dc().m_kernel), this->get_data_type_weights(0).get_values().LockedBuffer()));
-    this->dc().m_conv->forward(TensorDataType{1}, this->dc().get_prev_activations(),
-                               *(this->dc().m_kernel),
-                               TensorDataType{0}, this->dc().get_activations());
-  }
-
-  void apply_bias_distconv() {
-    if (this->m_bias_scaling_factor == TensorDataType(0)) return;
-    assert0(dc::tensor::View(
-        *(this->dc().m_bias), this->get_data_type_weights(1).get_values().LockedBuffer()));
-    this->dc().m_conv->apply_bias(
-        this->m_bias_scaling_factor, *(this->dc().m_bias),
-        TensorDataType{1}, this->dc().get_activations());
-  }
-
   void distconv_backward_data() {
     assert0(dc::tensor::View(
         *(this->dc().m_kernel), this->get_data_type_weights(0).get_values().LockedBuffer()));
@@ -1446,6 +1432,27 @@ size_t workspace_capacity) {
     m_conv->setup_bias(*m_bias);
     m_conv->setup_bias_gradient(*m_bias_gradient);
   }
+}
+
+template <typename TensorDataType, El::Device Device>
+void base_convolution_adapter<TensorDataType, Device>::apply_convolution() {
+  auto &l = dynamic_cast<base_convolution_layer<
+    TensorDataType, Device>&>(this->layer());
+  assert0(dc::tensor::View(
+      *m_kernel, l.get_data_type_weights(0).get_values().LockedBuffer()));
+  m_conv->forward(TensorDataType{1}, this->get_prev_activations(),
+                  *m_kernel, TensorDataType{0}, this->get_activations());
+}
+
+template <typename TensorDataType, El::Device Device>
+void base_convolution_adapter<TensorDataType, Device>::apply_bias() {
+  auto &l = dynamic_cast<base_convolution_layer<
+    TensorDataType, Device>&>(this->layer());
+  if (l.m_bias_scaling_factor == TensorDataType(0)) return;
+  assert0(dc::tensor::View(
+      *m_bias, l.get_data_type_weights(1).get_values().LockedBuffer()));
+  m_conv->apply_bias(l.m_bias_scaling_factor, *m_bias,
+                     TensorDataType{1}, this->get_activations());
 }
 #endif // LBANN_HAS_DISTCONV
 

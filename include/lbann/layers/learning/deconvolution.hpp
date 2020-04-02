@@ -173,8 +173,8 @@ protected:
     if(this->using_gpus()) {
 #ifdef LBANN_HAS_DISTCONV
       if (this->distconv_enabled()) {
-        this->distconv_forward();
-        this->apply_bias_distconv();
+        this->dc().apply_convolution();
+        this->dc().apply_bias();
         return;
       }
 #endif // LBANN_HAS_DISTCONV
