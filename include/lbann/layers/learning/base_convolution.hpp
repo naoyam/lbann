@@ -1303,9 +1303,6 @@ private:
   }
 
   void distconv_backward_data() {
-    // input: m_prev_error_signals_d[0]
-    // kernel: m_weights[0]->get_values_gpu()
-    // output: m_error_signals_d[0]
     assert0(dc::tensor::View(
         *(this->dc().m_kernel), this->get_data_type_weights(0).get_values().LockedBuffer()));
     this->dc().m_conv->backward_data(TensorDataType{1}, *(this->dc().m_kernel),
@@ -1381,8 +1378,6 @@ void base_convolution_adapter<TensorDataType, Device>::setup_fp_tensors() {
   const auto& kernel_dims = layer.get_kernel_dims();
   std::stringstream ss;
   dc::util::print_vector(ss, kernel_dims.begin(), kernel_dims.end());
-  dc::MPIPrintStreamDebug()
-      << "kernel_dims: " << ss.str();
 
   // assumes no partitioning on channel/filter dimensions
   assert_eq(input_dist.get_split_shape()[-2], 1);
@@ -1397,16 +1392,11 @@ void base_convolution_adapter<TensorDataType, Device>::setup_fp_tensors() {
       *m_kernel, layer.get_data_type_weights(0).get_values().LockedBuffer()));
 
   if (layer.m_bias_scaling_factor != TensorDataType(0)) {
-    dc::MPIPrintStreamDebug()
-        << "Bias desc: "
-        << dc::util::tostring(layer.m_bias_cudnn_desc)
-        << ", bias factor: " << layer.m_bias_scaling_factor;
     dc::Shape bias_shape(layer.get_num_dims(), 1);
     bias_shape[dc::get_channel_dim()] = layer.get_output_dims()[0];
     m_bias = make_unique<TensorDevType>(bias_shape, loc, shared_dist);
     assert0(dc::tensor::View(
         *m_bias, layer.get_data_type_weights(1).get_values().LockedBuffer()));
-    dc::MPIPrintStreamDebug() << "Bias tensor: " << *m_bias;
   }
 }
 
