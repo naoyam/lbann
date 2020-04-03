@@ -135,10 +135,7 @@ template <typename TensorDataType, data_layout T_layout, El::Device Dev>
 std::unique_ptr<typename split_distconv_adapter<TensorDataType, T_layout, Dev>::TensorDevType>
 split_distconv_adapter<TensorDataType, T_layout, Dev>::
 setup_activations_i(int index) const {
-  const auto &parent_activations =
-      dynamic_cast<const TensorDevType&>(
-          this->layer().get_parent_layers()[0]->dc().get_activations(this->layer()));
-  return make_unique<TensorDevType>(parent_activations);
+  return make_unique<TensorDevType>(this->get_prev_activations(0));
 }
 #endif // LBANN_HAS_DISTCONV
 
