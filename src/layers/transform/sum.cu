@@ -23,7 +23,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the license.
 ////////////////////////////////////////////////////////////////////////////////
-#ifdef LBANN_HAS_DISTCONV
+
 #define LBANN_SUM_LAYER_INSTANTIATE
 #include "lbann/layers/transform/sum.hpp"
 #include "lbann/utils/exception.hpp"
@@ -32,6 +32,18 @@
 
 namespace lbann {
 
+LBANN_LAYER_DEFAULT_BUILDER(sum)
+
+#define PROTO(T)                                                        \
+  template class sum_layer<T, data_layout::DATA_PARALLEL, El::Device::GPU>; \
+  template class sum_layer<T, data_layout::MODEL_PARALLEL, El::Device::GPU>; \
+  LBANN_LAYER_BUILDER_ETI(sum, T, El::Device::GPU)
+
+#define LBANN_INSTANTIATE_GPU_HALF
+#include "lbann/macros/instantiate.hpp"
+#undef PROTO
+
+#ifdef LBANN_HAS_DISTCONV
 namespace {
 template <typename TensorDataType>
 struct accumulate_op {
@@ -51,7 +63,7 @@ struct sum_op {
 template <typename TensorDataType, data_layout Layout, El::Device Dev>
 void sum_distconv_adapter<TensorDataType, Layout, Dev>::fp_compute() {
   auto &activations = this->get_activations();
-  switch (layer().get_num_parents()) {
+  switch (this->layer().get_num_parents()) {
     case 0:
       activations.zero(El::GPUManager::Stream());
       break;
@@ -71,7 +83,7 @@ void sum_distconv_adapter<TensorDataType, Layout, Dev>::fp_compute() {
                             El::GPUManager::Stream());
       break;
     default:
-      for (int i = 0; i < num_parents; ++i) {
+      for (int i = 0; i < this->layer().get_num_parents(); ++i) {
         auto &prev_activations = this->get_prev_activations(i);
         prev_activations.set_outermost_dimension(activations.get_shape()[-1]);
         if (i == 0) {
@@ -90,8 +102,7 @@ void sum_distconv_adapter<TensorDataType, Layout, Dev>::fp_compute() {
   template class sum_distconv_adapter<T, data_layout::DATA_PARALLEL, El::Device::GPU>; \
   template class sum_distconv_adapter<T, data_layout::MODEL_PARALLEL, El::Device::GPU>
 
-#define LBANN_INSTANTIATE_GPU_HALF
 #include "lbann/macros/instantiate.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 } // namespace lbann
-#endif // LBANN_HAS_DISTCONV

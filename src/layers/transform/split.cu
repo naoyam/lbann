@@ -23,7 +23,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the license.
 ////////////////////////////////////////////////////////////////////////////////
-#ifdef LBANN_HAS_DISTCONV
+
 #define LBANN_SPLIT_LAYER_INSTANTIATE
 #include "lbann/layers/transform/split.hpp"
 #include "lbann/utils/exception.hpp"
@@ -32,6 +32,18 @@
 
 namespace lbann {
 
+LBANN_LAYER_DEFAULT_BUILDER(split)
+
+#define PROTO(T)                                                        \
+  template class split_layer<T, data_layout::DATA_PARALLEL, El::Device::GPU>; \
+  template class split_layer<T, data_layout::MODEL_PARALLEL, El::Device::GPU>; \
+  LBANN_LAYER_BUILDER_ETI(split, T, El::Device::GPU)
+
+#define LBANN_INSTANTIATE_GPU_HALF
+#include "lbann/macros/instantiate.hpp"
+#undef PROTO
+
+#ifdef LBANN_HAS_DISTCONV
 namespace {
 template <typename TensorDataType>
 struct accumulate_op {
@@ -55,7 +67,7 @@ void split_distconv_adapter<TensorDataType, Layout, Dev>::bp_compute() {
     LBANN_ERROR("Distconv not supported");
   }
   auto &error_signals = this->get_error_signals(0);
-  switch (layer().get_num_children()) {
+  switch (this->layer().get_num_children()) {
     case 0:
       error_signals.zero(El::GPUManager::Stream());
       break;
@@ -75,7 +87,7 @@ void split_distconv_adapter<TensorDataType, Layout, Dev>::bp_compute() {
       dc::tensor::Copy(error_signals,
                        this->get_prev_error_signals(1),
                        El::GPUManager::Stream());
-      for (int i = 1; i < num_children; ++i) {
+      for (int i = 1; i < this->layer().get_num_children(); ++i) {
         const auto &prev_error = this->get_prev_error_signals(i);
         dc::tensor::Transform(error_signals, prev_error,
                               accumulate_op<TensorDataType>(),
@@ -91,6 +103,6 @@ void split_distconv_adapter<TensorDataType, Layout, Dev>::bp_compute() {
 
 #define LBANN_INSTANTIATE_GPU_HALF
 #include "lbann/macros/instantiate.hpp"
+#endif // LBANN_HAS_DISTCONV
 
 } // namespace lbann
-#endif // LBANN_HAS_DISTCONV
