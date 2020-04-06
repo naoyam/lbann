@@ -41,4 +41,18 @@ LBANN_LAYER_DEFAULT_BUILDER(sum)
 
 #include "lbann/macros/instantiate_device.hpp"
 
+#ifdef LBANN_HAS_DISTCONV
+template <typename TensorDataType, data_layout Layout, El::Device Dev>
+void sum_distconv_adapter<TensorDataType, Layout, Dev>::fp_compute() {
+  LBANN_ERROR("Distconv not supported");
+}
+
+#define PROTO(T)                                                        \
+  template class sum_distconv_adapter<T, data_layout::DATA_PARALLEL, El::Device::CPU>; \
+  template class sum_distconv_adapter<T, data_layout::MODEL_PARALLEL, El::Device::CPU>
+
+#define LBANN_INSTANTIATE_CPU_HALF
+#include "lbann/macros/instantiate.hpp"
+#endif // LBANN_HAS_DISTCONV
+
 }// namespace lbann
