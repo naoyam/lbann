@@ -32,23 +32,13 @@
 
 namespace lbann {
 
-template <typename TensorDataType, data_layout Layout, El::Device Dev>
-void sum_layer<TensorDataType, Layout, Dev>::fp_compute() {
-  auto& output = this->get_activations();
-  El::Copy(this->get_prev_activations(0), output);
-  for (int i = 1; i < this->get_num_parents(); ++i) {
-    El::Axpy(DataType(1), this->get_prev_activations(i), output);
-  }
-}
-
 LBANN_LAYER_DEFAULT_BUILDER(sum)
 
-#define PROTO(T)                                                        \
-  template class sum_layer<T, data_layout::DATA_PARALLEL, El::Device::CPU>; \
-  template class sum_layer<T, data_layout::MODEL_PARALLEL, El::Device::CPU>; \
-  LBANN_LAYER_BUILDER_ETI(sum, T, El::Device::CPU)
+#define PROTO_DEVICE(T, Device)                                    \
+  template class sum_layer<T, data_layout::DATA_PARALLEL, Device>; \
+  template class sum_layer<T, data_layout::MODEL_PARALLEL, Device>; \
+  LBANN_LAYER_BUILDER_ETI(sum, T, Device)
 
-#define LBANN_INSTANTIATE_CPU_HALF
-#include "lbann/macros/instantiate.hpp"
+#include "lbann/macros/instantiate_device.hpp"
 
 }// namespace lbann
