@@ -47,8 +47,11 @@ input_distconv_adapter(Layer& layer):  data_type_distconv_adapter<TensorDataType
   // layer. Other data readers are assumed to return a complete
   // sample, thus shuffling is required (unless sample-parallel
   // strategy is given). Conceptually, it seems to make sense if a
-  // data reader is annotated with a parallel strategy.
-  m_shuffle_required = dynamic_cast<hdf5_reader*>(l.get_data_reader()) != nullptr;
+  // data reader is annotated with a parallel strategy. Note that,
+  // when the HDF5 data reader is used, it is assumed that it is used
+  // in all execution modes.
+  auto training_dr = l.get_data_reader(execution_mode::training);
+  m_shuffle_required = dynamic_cast<hdf5_reader*>(training_dr) == nullptr;
   if (m_shuffle_required) {
     m_shufflers.resize(layer.get_num_children());
   }
